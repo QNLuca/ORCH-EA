@@ -62,7 +62,7 @@ class QBSolvPolicy(BasePolicy):
         super().__init__(name="qbsolv", **kwargs)
 
     def solve(self, meta, bqm, global_embedding,
-                is_all_embeddable,seed, qpu_identity, target_graph=None) -> Dict[str, Any]:
+                is_all_embeddable,seed, qpu_identity, target_graph=None, test_type = "normal") -> Dict[str, Any]:
         lp_filename = meta.get("lp_filename", None)
         bestknown_solution = float(meta.get("bestknown_solution",None))
 

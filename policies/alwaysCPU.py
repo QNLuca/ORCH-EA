@@ -14,8 +14,13 @@ class AlwaysCPURouter(BaseRouter):
         super().__init__(qpu_sampler=qpu_sampler, cpu_sampler=cpu_sampler, **kwargs)
     
     def next(self, state, **kwargs):
-
+        
         res_state = self._execute_route(state, route_to_qpu=False)
+
+        proxy_metrics = res_state.info.get("proxy_metrics", {})
+
+        if proxy_metrics:
+            self._compute_proxy_metrics(proxy_metrics)
 
         return state.updated(subsamples=res_state)
 
@@ -24,7 +29,7 @@ class AlwaysCPUPolicy(BasePolicy):
     def __init__(self, **kwargs):
         super().__init__(name="always_cpu", **kwargs)
 
-    def solve(self, meta, bqm, global_embedding, is_all_embeddable, seed, qpu_identity=None, target_graph=None) -> Dict[str, Any]:
+    def solve(self, meta, bqm, global_embedding, is_all_embeddable, seed, qpu_identity=None, target_graph=None, test_type = "normal") -> Dict[str, Any]:
         lp_filename = meta.get("lp_filename", None)
         bestknown_solution = float(meta.get("bestknown_solution",None))
 

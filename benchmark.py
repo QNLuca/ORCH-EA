@@ -45,6 +45,20 @@ POLICY_DEQUE = deque([
     "only_ea_based"
 ])
 
+ABLATION_DEQUE = deque([
+    "embedding_aware",
+    "only_features_based",
+    "only_ea_based"
+])
+
+REGRET_DEQUE = deque([
+    "embedding_aware",
+    "mqt_qao",
+    "always_qpu_embeddable",
+    "only_features_based",
+    "only_ea_based"
+])
+
 #funzione factory per generare correttamente istanze per ogni policy
 def get_policy_instance(name: str, subproblem_size: int, max_iter: int, convergence: int, embedding_time: float):
     if name == "always_cpu":
@@ -65,7 +79,14 @@ def get_policy_instance(name: str, subproblem_size: int, max_iter: int, converge
         raise ValueError(f"Policy sconosciuta: {name}")
 
 def run_comparative_suite(bqm: dimod.BinaryQuadraticModel, orchestratorEA: EmbeddingAwareOrchestrator, meta: Optional[Dict], seed=None, 
-                          qpu_identity = None, target_graph = None, max_iter: Optional[int] = 5, convergence: Optional[int] = 2):
+                          qpu_identity = None, target_graph = None, max_iter: Optional[int] = 5, convergence: Optional[int] = 2, test_type = "normal"):
+
+    if test_type == "ablation":
+        policyDeque = ABLATION_DEQUE
+    elif test_type == "regret":
+        policyDeque = REGRET_DEQUE
+    else:
+        policyDeque = POLICY_DEQUE
 
     mybqm = SubQUBO(bqm)
 
@@ -89,10 +110,12 @@ def run_comparative_suite(bqm: dimod.BinaryQuadraticModel, orchestratorEA: Embed
     bqm_avg_degree = mybqm.average_degree
     bqm_density = mybqm.density
 
+    lp_filename = meta.get("lp_filename", None)
+
     is_qpu_ready = not ((bqm_avg_degree > 52 and bqm_num_vars > 192 and bqm_density > 0.052) 
                                   or (bqm_num_vars > 250 and bqm_density >= 0.052))
 
-    print("Calcolo embedding globale per il BQM in corso...")
+    print(f"Calcolo embedding globale per il BQM {lp_filename} in corso...")
     start_time_emb = time.perf_counter()
     if mybqm.num_variables < max_global_size and is_qpu_ready:
         global_embedding, is_all_embeddable, _ = mybqm.compute_embedding(bqm, target_graph, seed)
@@ -105,50 +128,96 @@ def run_comparative_suite(bqm: dimod.BinaryQuadraticModel, orchestratorEA: Embed
     #size del sottoproblema cresce in maniera controllata e variabile-dipendente
     subproblem_size = int(math.ceil(2.0 * math.sqrt(len(bqm.variables))))
 
-    print(f"AVVIO BENCHMARK COMPARATIVO ROUTING POLICY (BQM N={len(bqm.variables)})")
+    print(f"AVVIO BENCHMARK COMPARATIVO ROUTING POLICY ({lp_filename}, BQM N={len(bqm.variables)})")
 
     results = []
 
     #itera sulla coda ruotata e istanzia dinamicamente la policy corrispondente
-    for policy_name in POLICY_DEQUE:
-        print(f"Valutazione Policy: [{policy_name}] ...")
-        
-        #istanziazione dinamica basata sul nome corrente nella deque
-        if policy_name == "embedding_aware":
-            res = orchestratorEA.solve(
-                bqm, meta, 
-                global_embedding_bench=global_embedding,
-                is_all_embeddable_bench=is_all_embeddable,
-                benchmark=True, 
-                embedding_time=embedding_time, 
-                seed=seed, 
-                target_graph=target_graph, 
-                qpu_identity=qpu_identity
-            )
-        else:
-            #mappatura per istanziare la policy corretta con i parametri previsti
-            policy_obj = get_policy_instance(
-                policy_name, 
-                subproblem_size=subproblem_size, 
-                max_iter=max_iter, 
-                convergence=convergence, 
-                embedding_time=embedding_time
-            )
-            
-            res = policy_obj.solve(
-                meta=meta,
-                bqm=bqm,
-                global_embedding=global_embedding,
-                is_all_embeddable=is_all_embeddable,
-                target_graph=target_graph,
-                seed=seed,
-                qpu_identity=qpu_identity
-            )
-            
-        results.append(res)
+    if test_type == "ablation":       
+
+        for minorminer_seed in range(0,3):
+                
+                current_policies = list(policyDeque)
+
+                for policy_name in current_policies:
+                    print(f"Valutazione Policy: [{policy_name}] ...")
+
+                    #istanziazione dinamica basata sul nome corrente nella deque
+                    if policy_name == "embedding_aware":
+                        res = orchestratorEA.solve(
+                            bqm, meta, 
+                            global_embedding_bench=global_embedding,
+                            is_all_embeddable_bench=is_all_embeddable,
+                            benchmark=True, 
+                            embedding_time=embedding_time, 
+                            seed=minorminer_seed, 
+                            target_graph=target_graph, 
+                            qpu_identity=qpu_identity,
+                        )
+                    else:
+                        #mappatura per istanziare la policy corretta con i parametri previsti
+                        policy_obj = get_policy_instance(
+                            policy_name, 
+                            subproblem_size=subproblem_size, 
+                            max_iter=max_iter, 
+                            convergence=convergence, 
+                            embedding_time=embedding_time
+                        )
+
+                        res = policy_obj.solve(
+                            meta=meta,
+                            bqm=bqm,
+                            global_embedding=global_embedding,
+                            is_all_embeddable=is_all_embeddable,
+                            target_graph=target_graph,
+                            seed=minorminer_seed,
+                            qpu_identity=qpu_identity,
+                        )
+
+                    results.append(res)
+                    
+                policyDeque.rotate(1) #ruoto ad ogni cambio di seed
+
+                print(f"Eseguito ablation test di {lp_filename} con seed {minorminer_seed}")
+    else:
+        for policy_name in policyDeque:
+            print(f"Valutazione Policy: [{policy_name}] ...")
+            #istanziazione dinamica basata sul nome corrente nella deque
+            if policy_name == "embedding_aware":
+                res = orchestratorEA.solve(
+                    bqm, meta, 
+                    global_embedding_bench=global_embedding,
+                    is_all_embeddable_bench=is_all_embeddable,
+                    benchmark=True, 
+                    embedding_time=embedding_time, 
+                    seed=seed, 
+                    target_graph=target_graph, 
+                    qpu_identity=qpu_identity,
+                    test_type = test_type
+                )
+            else:
+                #mappatura per istanziare la policy corretta con i parametri previsti
+                policy_obj = get_policy_instance(
+                    policy_name, 
+                    subproblem_size=subproblem_size, 
+                    max_iter=max_iter, 
+                    convergence=convergence, 
+                    embedding_time=embedding_time
+                )
+                res = policy_obj.solve(
+                    meta=meta,
+                    bqm=bqm,
+                    global_embedding=global_embedding,
+                    is_all_embeddable=is_all_embeddable,
+                    target_graph=target_graph,
+                    seed=seed,
+                    qpu_identity=qpu_identity,
+                    test_type = test_type
+                )
+            results.append(res)
 
     #rotazione policy, avanti deterministicamente di 1
-    POLICY_DEQUE.rotate(1)
+    policyDeque.rotate(1)
 
     print(f"BENCHMARK COMPARATIVO COMPLETATO (BQM N={len(bqm.variables)})")
 
@@ -195,15 +264,33 @@ def extract_instance_number(fpath):
 
     return lp_filename
 
-def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_dict: Optional[dict] = None):
+def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_dict: Optional[dict] = None, test_type= "normal", n_instances = 45):
+    
     lp_dir = os.path.join("test", "lp")
+    lp_files = list(Path(lp_dir).rglob("*.[lL][pP]"))
 
     if not os.path.exists(lp_dir):
         msg = f"Errore: La cartella '{lp_dir}' non esiste"
         print(msg)
         return {"status": "error", "message": msg}
 
-    lp_files = list(Path(lp_dir).rglob("*.[lL][pP]"))
+    if test_type in ("regret", "ablation"):
+        policiesDeque = REGRET_DEQUE if test_type == "regret" else ABLATION_DEQUE
+    else:
+        policiesDeque = POLICY_DEQUE
+
+    if n_instances != 45:
+        jsonFile = f"{n_instances}instances.json"
+
+        with open(os.path.join("test", jsonFile), encoding="utf-8") as f:
+            selected = json.load(f)
+
+        allowed_ids = {str(v) for v in selected.values()}
+
+        lp_files = [
+            f for f in lp_files
+            if extract_instance_number(f) in allowed_ids
+        ]
     
     if not lp_files:
         msg = f"Nessun file .lp trovato in '{lp_dir}'"
@@ -216,7 +303,7 @@ def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_d
     os.makedirs(results_dir, exist_ok=True) #assicura che la cartella esista
 
     code_version = status_dict["code_version"]
-    base_name = f"orchestrator_test_results.{code_version}"
+    base_name = f"orchestrator_test_results_{test_type}.{code_version}"
     suffix = ".parquet"
 
     orchestrators_results = os.path.join(results_dir, f"{base_name}{suffix}")
@@ -263,6 +350,7 @@ def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_d
                 "convergence": convergence,
                 "num_reads": 40,
             },
+            "policies": list(policiesDeque),
             "minorminer_seed": seed,
             "qplib_instances": [str(f.name) for f in lp_files],
             "hardware_backend": f"DWaveSampler: {qpu_identity}" if DWAVE_API_KEY else "None: Simulated Annealing"
@@ -272,13 +360,12 @@ def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_d
         print(f"Creato file di metadati JSON: {json_metadata_path}")
 
     target_graph=dnx.zephyr_graph(12)
-    qpu_identity=None 
 
     #Advantage2_system1, graph_id: 01b03fc8dc
-    #qpu_identity = {
-    #"name": "Advantage2_system1",
-    #"version": {"graph_id": "01b03fc8dc"},
-    #}
+    qpu_identity = {
+    "name": "Advantage2_system1",
+    "version": {"graph_id": "01b03fc8dc"},
+    }
 
     if DWAVE_API_KEY:
         if qpu_identity:
@@ -298,9 +385,10 @@ def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_d
 
         bqm, meta = LoadLp.load_qubo_lp(filepath_str, file = True)
 
+        
         single_runs = run_comparative_suite(
             bqm=bqm, orchestratorEA=orchestratorEA, meta=meta, max_iter=max_iter, 
-            convergence=convergence, qpu_identity=qpu_identity, target_graph=target_graph, seed=seed
+            convergence=convergence, qpu_identity=qpu_identity, target_graph=target_graph, seed=seed, test_type = test_type
         )
 
         t1 = time.perf_counter()

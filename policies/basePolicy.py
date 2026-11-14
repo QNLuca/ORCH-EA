@@ -19,7 +19,10 @@ class BasePolicy(ABC):
         bqm: dimod.BinaryQuadraticModel, 
         global_embedding: Dict, 
         is_all_embeddable: bool, 
-        target_graph: Any = None
+        seed,
+        qpu_identity = None,
+        target_graph = None,
+        test_type = "normal"
     ) -> Dict[str, Any]:
         """Metodo astratto da implementare in ogni policy specifica."""
         pass

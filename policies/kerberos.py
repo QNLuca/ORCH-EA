@@ -61,7 +61,7 @@ class KerberosPolicy(BasePolicy):
         super().__init__(name="kerberos", **kwargs)
 
     def solve(self, meta, bqm, seed, global_embedding,
-                is_all_embeddable, qpu_identity, target_graph=None) -> Dict[str, Any]:
+                is_all_embeddable, qpu_identity, target_graph=None, test_type = "normal") -> Dict[str, Any]:
         lp_filename = meta.get("lp_filename", None)
         bestknown_solution = float(meta.get("bestknown_solution",None))
 
@@ -173,6 +173,8 @@ class KerberosPolicy(BasePolicy):
             "qpu_calls": total_qpu,
             "cpu_calls": total_cpu,
             "qpu_utilization_ratio": total_qpu/total_calls if total_calls > 0 else 0.0,
+            "time_subqubo_embedding": 0.0,
+            "time_routing_total": 0.0,
             
             **cqmResults,
             "estimated_leap_qpu_time_us": calls["estimated_leap_qpu_time_us"],

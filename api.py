@@ -39,10 +39,12 @@ orchestrator = EmbeddingAwareOrchestrator(
 
 benchmark_status = {
     "code_version": f"{__version__}",
+    "test_type": "normal",
     "running": False,
     "current_file": None,
     "completed": 0,
-    "total": 0
+    "total": 0,
+    "error": ""
 }
 
 ### MODELLI DI RICHIESTA E RISPOSTA ###
@@ -76,6 +78,22 @@ class LPUrlRequest(BaseModel):
     verbose: Optional[bool] = False
     """
     Stampa più informazioni sull'esecuzione dell'orchestratore.
+    """
+
+class BenchmarkRequest(BaseModel): 
+    model_config = ConfigDict(use_attribute_docstrings=True)
+
+    regret_test: Optional[bool] = False
+    """
+    Avvia un benchmark sui file locali eseguendo i sottoproblemi sia sul ramo quantistico che sul ramo classico e calcola la metrica di routing regret.
+    """
+    ablation_test: Optional[bool] = False
+    """
+    Avvia un ablation test sui file locali tra le policy embedding_aware, only_features e only_EA. Vengono eseguite tre risoluzioni a istanza con tre differenti seed.
+    """
+    n_instances: Optional[int] = 45
+    """
+    Indica il numero di istanze su cui effettuare i test. Valori disponibili: 45, 30, 20, 5.
     """
 
 class JobSubmitResponse(BaseModel):
@@ -201,11 +219,22 @@ def run_benchmark_pipeline(job_id: str, req: LPUrlRequest):
         }
         redis_client.setex(f"job:{job_id}", 86400, json.dumps(error_payload, default=str))
 
-def background_benchmark_task():
+def background_benchmark_task(req: BenchmarkRequest):
     global benchmark_status
+    
+    if req.ablation_test:
+        test_type = "ablation"
+    elif req.regret_test:
+        test_type = "regret"
+    else: 
+        test_type = "normal"
+
+    n_instances = req.n_instances
+
+    benchmark_status['test_type'] = test_type
     benchmark_status["running"] = True
     try:
-        execute_files_benchmark(orchestratorEA=orchestrator, status_dict=benchmark_status)
+        execute_files_benchmark(orchestratorEA=orchestrator, status_dict=benchmark_status, test_type =test_type, n_instances=n_instances)
     except Exception as e:
         #stampa il traceback nei log di sistema
         tb_str = traceback.format_exc()
@@ -247,11 +276,23 @@ def benchmark_lp_from_url(request: LPUrlRequest, background_tasks: BackgroundTas
     )
 
 @app.post("/benchmark-local-files")
-def start_benchmark(background_tasks: BackgroundTasks):
+def start_benchmark(request: BenchmarkRequest, background_tasks: BackgroundTasks):
     if benchmark_status["running"]:
         raise HTTPException(status_code=400, detail="Un benchmark è già in esecuzione!")
+
+    if request.ablation_test and request.regret_test:
+        raise HTTPException(
+            status_code=400,
+            detail="ablation test e regret test non possono essere eseguiti contemporaneamente."
+        )
+
+    if request.n_instances not in [45,30,20,5]:
+        raise HTTPException(
+            status_code=400,
+            detail="Il numero di istanze deve essere specificato tra i seguenti valori: 45, 30, 20, 5."
+        )
     
-    background_tasks.add_task(background_benchmark_task)
+    background_tasks.add_task(background_benchmark_task, request)
     return {"message": "Benchmark avviato con successo in background."}
 
 @app.get("/benchmark-local-files-status")
