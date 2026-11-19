@@ -564,9 +564,16 @@ class EmbeddingAwareOrchestrator:
                     #estrazione di timing
                     if successLeap and res_sampleset is not None:
                         #payload più leggero, meglio che impostare answer_mode='raw' nel sampler
-                        cbf = res_sampleset.record.chain_break_fraction
-                        weights = res_sampleset.record.num_occurrences #record identici vengono raggruppati, dunque bisogna valutare numero di occorrenze
-                        avg_chain_break = float(np.average(cbf, weights=weights)) if len(cbf) > 0 else 0.0
+
+                        if "chain_break_fraction" in res_sampleset.record.dtype.names:
+                            cbf = res_sampleset.record.chain_break_fraction
+                            weights = res_sampleset.record.num_occurrences #record identici vengono raggruppati, dunque bisogna valutare numero di occorrenze
+                            avg_chain_break = float(np.average(cbf, weights=weights)) if len(cbf) > 0 else 0.0
+                        else:
+                            chain_break_fraction = list(chain_break_frequency(physical_sampleset, global_embedding).values()) # Returns: dict: Frequency of chain breaks as a dict in the form {s: f, ...},  where s is a variable in the source graph, and frequency, a float, is the fraction of broken chains.                       
+                            avg_chain_break = np.mean(chain_break_fraction) if len(chain_break_fraction) > 0 else 0.0
+
+
 
                         timing_info = res_sampleset.info.get('timing', {})
 
@@ -626,7 +633,11 @@ class EmbeddingAwareOrchestrator:
 
                     final_time = time.perf_counter() - start_time
 
-                    cbf = res_sampleset.record.chain_break_fraction
+                    if "chain_break_fraction" in res_sampleset.record.dtype.names:
+                        cbf = res_sampleset.record.chain_break_fraction
+                    else:
+                        cbf = chain_break_frequency(physical_sampleset, global_embedding)
+
                     weights = res_sampleset.record.num_occurrences
                     avg_chain_break = float(np.average(cbf, weights=weights)) if len(cbf) > 0 else 0.0
 

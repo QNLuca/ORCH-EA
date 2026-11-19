@@ -13,7 +13,7 @@ from utils.mockSolverOffline import OfflineQPUSolver
 
 from dwave.system import DWaveSampler, FixedEmbeddingComposite
 from dwave.cloud import Client
-from dwave.embedding import embed_bqm, unembed_sampleset
+from dwave.embedding import embed_bqm, unembed_sampleset, chain_break_frequency
 from dwave.embedding.chain_breaks import majority_vote
 from dwave.embedding.chain_strength import uniform_torque_compensation
 from dwave.cloud.exceptions import SolverError, InvalidAPIResponseError, PollingTimeout, ProblemUploadError, RequestTimeout
@@ -244,9 +244,13 @@ def qpu_branch(sub_bqm, embedding, rq_job, chain_strength_prefactor: float = Non
              ################################################################
              res_sampleset = logical_sampleset
 
-             cbf = res_sampleset.record.chain_break_fraction
-             weights = res_sampleset.record.num_occurrences
-             avg_chain_break = float(np.average(cbf, weights=weights)) if len(cbf) > 0 else 0.0
+             if "chain_break_fraction" in res_sampleset.record.dtype.names:
+                 cbf = res_sampleset.record.chain_break_fraction
+                 weights = res_sampleset.record.num_occurrences
+                 avg_chain_break = float(np.average(cbf, weights=weights)) if len(cbf) > 0 else 0.0
+             else:
+                 chain_break_fraction = list(chain_break_frequency(physical_sampleset, embedding).values()) # Returns: dict: Frequency of chain breaks as a dict in the form {s: f, ...},  where s is a variable in the source graph, and frequency, a float, is the fraction of broken chains.                       
+                 avg_chain_break = np.mean(chain_break_fraction) if len(chain_break_fraction) > 0 else 0.0
 
              emb_metrics = SubQUBO.compute_advanced_embedding_metrics(embedding, sub_bqm, avg_chain_break)
 
