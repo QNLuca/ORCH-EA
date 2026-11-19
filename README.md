@@ -1,6 +1,6 @@
-# QUBO Orchestrator
+# ORCH-EA
 
-Orchestratore sviluppato con **FastAPI** e **Redis** per l'elaborazione, la decomposizione di problemi di ottimizzazione combinatoria BQM/QUBO derivati da file `.lp` (ad es. [QPLIB](https://qplib.zib.de)).
+ORCH-EA è un orchestratore sviluppato con **FastAPI** e **Redis** per l'elaborazione, la decomposizione di problemi di ottimizzazione combinatoria BQM/QUBO derivati da file `.lp` (ad es. [QPLIB](https://qplib.zib.de)).
 
 Il sistema coordina tramite dinamiche di routing risorse classiche (CPU/Tabu/SA) e Quantum Annealing (D-Wave QPU) adottando un innovativo sistema **embedding-aware** per valutare la migliore configurazione d'esecuzione per problemi o eventuali sottoproblemi sub-QUBO.
 
@@ -10,14 +10,6 @@ Il sistema coordina tramite dinamiche di routing risorse classiche (CPU/Tabu/SA)
 
 * **Embedding-Aware Partitioning**: Valutazione euristica e dinamica dell'embedding su topologie Quantum Annealer target (es. D-Wave Zephyr) per determinare l'instradamento ideale dei sub-QUBO.
 * **Elaborazione Asincrona**: Gestione tramite job ID in background con persistenza e tracciamento dello stato su Redis.
-
----
-
-## TODO
-
-- [x] Aggiungere metodi interazione QPU reale
-- [ ] Commentare e ripulire codice
-- [x] Aggiungere ulteriori metriche per sperimentazione
 
 ---
 
