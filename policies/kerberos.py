@@ -146,7 +146,7 @@ class KerberosPolicy(BasePolicy):
 
         cqmResults = {}
         
-        if len(cqm.constraints)>0:
+        if cqm is not None and len(cqm.constraints) > 0:
             all_samples = final_state.samples #sarà solo 1
             cqmResults = CqmUtilities.evaluate_cqm_feasibility(all_samples,invert_func, cqm, is_maximize)
             best_energy = cqmResults['cqm_objective_energy']
@@ -173,8 +173,6 @@ class KerberosPolicy(BasePolicy):
             "qpu_calls": total_qpu,
             "cpu_calls": total_cpu,
             "qpu_utilization_ratio": total_qpu/total_calls if total_calls > 0 else 0.0,
-            "time_subqubo_embedding": 0.0,
-            "time_routing_total": 0.0,
             
             **cqmResults,
             "estimated_leap_qpu_time_us": calls["estimated_leap_qpu_time_us"],

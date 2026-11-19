@@ -31,7 +31,7 @@ from loadLp import LoadLp
 #carica le variabili contenute nel file .env
 load_dotenv()
 
-DWAVE_API_KEY = os.getenv("DWAVE_API_TOKEN")
+DWAVE_API_TOKEN = os.getenv("DWAVE_API_TOKEN")
 
 #coda globale che definisce l'ordine di rotazione delle policy
 POLICY_DEQUE = deque([
@@ -93,7 +93,7 @@ def run_comparative_suite(bqm: dimod.BinaryQuadraticModel, orchestratorEA: Embed
     if seed is None:
         seed = random.randint(0,10)
 
-    if DWAVE_API_KEY:
+    if DWAVE_API_TOKEN and target_graph is None:
         sampler = DWaveSampler(topology__type="zephyr")
         qpu_identity = sampler.solver.identity
         target_graph = sampler.to_networkx_graph()
@@ -282,7 +282,7 @@ def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_d
     if n_instances != 45:
         jsonFile = f"{n_instances}instances.json"
 
-        with open(os.path.join("test", jsonFile), encoding="utf-8") as f:
+        with open(os.path.join("test","lp", jsonFile), encoding="utf-8") as f:
             selected = json.load(f)
 
         allowed_ids = {str(v) for v in selected.values()}
@@ -353,7 +353,7 @@ def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_d
             "policies": list(policiesDeque),
             "minorminer_seed": seed,
             "qplib_instances": [str(f.name) for f in lp_files],
-            "hardware_backend": f"DWaveSampler: {qpu_identity}" if DWAVE_API_KEY else "None: Simulated Annealing"
+            "hardware_backend": f"DWaveSampler: {qpu_identity}" if DWAVE_API_TOKEN else "None: Simulated Annealing"
         }
         with open(json_metadata_path, "w", encoding="utf-8") as f:
             json.dump(experiment_metadata, f, indent=4)
@@ -367,7 +367,7 @@ def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_d
     "version": {"graph_id": "01b03fc8dc"},
     }
 
-    if DWAVE_API_KEY:
+    if DWAVE_API_TOKEN:
         if qpu_identity:
             sampler = DWaveSampler(solver=dict(identity=qpu_identity))
             target_graph = sampler.to_networkx_graph()

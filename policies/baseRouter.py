@@ -232,7 +232,7 @@ class BaseRouter(hybrid.Runnable):
             target_bqm = embed_bqm(
                 qpu_state, 
                 embedding=embedding, 
-                target_adjacency=dnx.zephyr_graph(12),
+                target_adjacency=self.target_graph,
                 chain_strength=chain_strength
             )
             t_build = time.perf_counter() - t_build_0

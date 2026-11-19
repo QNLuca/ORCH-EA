@@ -14,7 +14,7 @@ class SubQUBO:
     Rappresentazione di un sotto-problema quadratico per estrazione rapida features.
     """
     bqm: dimod.BinaryQuadraticModel
-    embedding: Optional[Dict] = None
+    #embedding: Optional[Dict] = None
 
     @property
     def variables(self) -> List[Union[int, str]]:

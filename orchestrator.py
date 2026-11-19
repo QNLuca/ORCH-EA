@@ -152,7 +152,6 @@ class AsyncRedisDispatcherSampler(hybrid.Runnable):
                     if proxy_metrics:
                         with self.lock:
                             self.total_solve_time += float(proxy_metrics["solve_time"]) #sia qpu che cpu
-                            #good_embedding = proxy_metrics.get("good_embedding", False)
                             from_qpu = proxy_metrics.get("from_qpu", False)
                             real_qpu = proxy_metrics.get("real_qpu", False)
                             if "chain_break_fraction" in proxy_metrics:
@@ -180,14 +179,6 @@ class AsyncRedisDispatcherSampler(hybrid.Runnable):
                                 self.total_total_post_processing_time += float(proxy_metrics["total_post_processing_time"])
                                 self.total_post_processing_overhead_time += float(proxy_metrics["post_processing_overhead_time"])
 
-                            #if good_embedding and from_qpu:
-                            #    self.tp += 1
-                            #elif not good_embedding and from_qpu:
-                            #    self.fp +=1
-                            #elif good_embedding and not from_qpu:
-                            #    self.fn +=1
-                            #elif not good_embedding and not from_qpu:
-                            #    self.tn +=1
                             if self.test_type == "regret":
                                 regret = proxy_metrics.get("regret",False)
                                 self.all_regret_energy_gap.append(proxy_metrics["regret_energy_gap"])
@@ -683,7 +674,7 @@ class EmbeddingAwareOrchestrator:
 
             cqmResults = {}
 
-            if len(cqm.constraints)>0:
+            if cqm is not None and len(cqm.constraints) > 0:
                 all_samples = res_sampleset
                 cqmResults = CqmUtilities.evaluate_cqm_feasibility(all_samples,invert_func, cqm, is_maximize)
                 best_energy = cqmResults['cqm_objective_energy'] #segno già cambiato in caso di funzione obiettivo da massimizzare
@@ -798,7 +789,7 @@ class EmbeddingAwareOrchestrator:
 
         cqmResults = {}
 
-        if len(cqm.constraints)>0:
+        if cqm is not None and len(cqm.constraints) > 0:
             all_samples = final_state.samples
             cqmResults = CqmUtilities.evaluate_cqm_feasibility(all_samples, invert_func, cqm, is_maximize)
             best_energy = cqmResults['cqm_objective_energy']

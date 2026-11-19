@@ -127,7 +127,7 @@ class QBSolvPolicy(BasePolicy):
 
         cqmResults = {}
         
-        if len(cqm.constraints)>0:
+        if cqm is not None and len(cqm.constraints) > 0:
             all_samples = final_state.samples #sarà solo 1
             cqmResults = CqmUtilities.evaluate_cqm_feasibility(all_samples,invert_func, cqm, is_maximize)
             best_energy = cqmResults['cqm_objective_energy']

@@ -31,9 +31,6 @@ REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
 
 
-
-
-
 def _build_qpu_metrics(res_sampleset: dimod.SampleSet, embedding, sub_bqm: dimod.BinaryQuadraticModel, wall_service_time: float) -> dict:
     """Helper condiviso tra esecuzione normale e recovery per estrarre le metriche QPU."""
     timing_info = res_sampleset.info.get('timing', {})
@@ -155,7 +152,7 @@ def qpu_branch(sub_bqm, embedding, rq_job, chain_strength_prefactor: float = Non
              for attempt in range(1, max_retries + 1):
                  try:
                      t_start = time.perf_counter()
-                     job_label = f"rq_{rq_job.id}_att_{attempt}" if rq_job else f"local_att_{attempt}"
+                     job_label = f"rq_{rq_job.id}_att_{attempt}"
 
                      res_sampleset = fixed_composite.sample(
                          sub_bqm,
@@ -234,10 +231,6 @@ def qpu_branch(sub_bqm, embedding, rq_job, chain_strength_prefactor: float = Non
              physical_sampleset = end_state.samples
              t_solve = time.perf_counter() - t_solve_0
 
-             cbf = res_sampleset.record.chain_break_fraction
-             weights = res_sampleset.record.num_occurrences
-             avg_chain_break = float(np.average(cbf, weights=weights)) if len(cbf) > 0 else 0.0
-
              t_unembed_0 = time.perf_counter()
              logical_sampleset = unembed_sampleset(physical_sampleset, embedding, sub_bqm, chain_break_method=majority_vote)
              t_unembed = time.perf_counter() - t_unembed_0
@@ -250,6 +243,10 @@ def qpu_branch(sub_bqm, embedding, rq_job, chain_strength_prefactor: float = Non
              )
              ################################################################
              res_sampleset = logical_sampleset
+
+             cbf = res_sampleset.record.chain_break_fraction
+             weights = res_sampleset.record.num_occurrences
+             avg_chain_break = float(np.average(cbf, weights=weights)) if len(cbf) > 0 else 0.0
 
              emb_metrics = SubQUBO.compute_advanced_embedding_metrics(embedding, sub_bqm, avg_chain_break)
 
