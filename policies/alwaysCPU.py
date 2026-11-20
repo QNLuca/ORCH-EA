@@ -29,17 +29,19 @@ class AlwaysCPUPolicy(BasePolicy):
     def __init__(self, **kwargs):
         super().__init__(name="always_cpu", **kwargs)
 
-    def solve(self, meta, bqm, global_embedding, is_all_embeddable, seed, qpu_identity=None, target_graph=None, test_type = "normal") -> Dict[str, Any]:
-        lp_filename = meta.get("lp_filename", None)
-        bestknown_solution = float(meta.get("bestknown_solution",None))
+    def solve(self, 
+              #meta, bqm, global_embedding, is_all_embeddable, seed, qpu_identity=None, target_graph=None, 
+              test_type = "normal") -> Dict[str, Any]:
+        lp_filename = self.meta.get("lp_filename", None)
+        bestknown_solution = float(self.meta.get("bestknown_solution",None))
 
-        invert_func = meta.get("invert_func", None)
+        invert_func = self.meta.get("invert_func", None)
                 
-        cqm = meta.get("cqm",None)
+        cqm = self.meta.get("cqm",None)
 
-        is_maximize = meta.get("is_maximize", False)
+        is_maximize = self.meta.get("is_maximize", False)
 
-        mybqm = SubQUBO(bqm)
+        mybqm = SubQUBO(self.bqm)
         
         bqm_num_vars = mybqm.num_variables
         bqm_avg_degree = mybqm.average_degree
@@ -56,7 +58,7 @@ class AlwaysCPUPolicy(BasePolicy):
 
         decomposer = hybrid.Unwind(
             hybrid.EnergyImpactDecomposer(
-                size=min(self.subproblem_size, len(bqm.variables)),
+                size=min(self.subproblem_size, bqm_num_vars),
                 rolling=True,
                 rolling_history=0.3,
                 traversal='bfs'
@@ -72,8 +74,8 @@ class AlwaysCPUPolicy(BasePolicy):
         )
 
         main = hybrid.Loop(subproblem_pipeline, max_iter=self.max_iter, convergence=self.convergence)
-        init_sample = dimod.SimulatedAnnealingSampler().sample(bqm, num_reads=1).first.sample
-        init_state = hybrid.State.from_sample(init_sample, bqm)
+        init_sample = dimod.SimulatedAnnealingSampler().sample(self.bqm, num_reads=1).first.sample
+        init_state = hybrid.State.from_sample(init_sample, self.bqm)
 
         final_state = main.run(init_state).result()
         total_wall_clock = time.perf_counter() - start_time
@@ -93,9 +95,14 @@ class AlwaysCPUPolicy(BasePolicy):
         rel_gap = abs(best_energy - bestknown_solution) / abs(bestknown_solution) if bestknown_solution else None
         abs_gap = abs(best_energy - bestknown_solution) if bestknown_solution is not None else None
 
+        qpu_calls = router.leap_qpu_calls + router.fallback_qpu_calls
+        total_calls = router.leap_qpu_calls + router.fallback_qpu_calls + router.cpu_calls
+
+        all_estimated_qpu = router.estimated_runtime_total
+
         return {
             "instance_id": lp_filename,
-            "seed": seed,
+            "seed": self.seed,
             "num_vars": bqm_num_vars,
             "avg_degree": bqm_avg_degree,
             "density": bqm_density,
@@ -106,11 +113,13 @@ class AlwaysCPUPolicy(BasePolicy):
             "abs_gap": abs_gap,
             "rel_gap": rel_gap,
             "wall_clock_time": total_wall_clock,
-            "qpu_calls": 0,
+            "qpu_calls": router.fallback_qpu_calls,
+            "leap_qpu_calls": router.leap_qpu_calls,
             "cpu_calls": router.cpu_calls,
-            "qpu_utilization_ratio": 0.0,
+            "qpu_utilization_ratio": qpu_calls / total_calls if total_calls > 0 else 0.0,
+            "real_qpu_utilization_ratio": router.leap_qpu_calls / total_calls if total_calls > 0 else 0.0,
             "decomposed": True,
             
             **cqmResults,
-            "estimated_leap_qpu_time_us": 0.0,
+            "estimated_leap_qpu_time_us": all_estimated_qpu,
         }

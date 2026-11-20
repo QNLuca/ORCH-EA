@@ -12,6 +12,7 @@ from dwave.cloud.exceptions import SolverError, InvalidAPIResponseError, Polling
 import numpy as np
 
 from subQUBO import SubQUBO
+from utils.leapBudget import can_afford, charge
 from utils.mockSolverOffline import OfflineQPUSolver
 
 class BaseRouter(hybrid.Runnable):
@@ -20,7 +21,8 @@ class BaseRouter(hybrid.Runnable):
         super().__init__(**runopts)
         self.qpu_sampler = qpu_sampler
         self.cpu_sampler = cpu_sampler
-        self.qpu_calls = 0
+        self.leap_qpu_calls = 0
+        self.fallback_qpu_calls = 0
         self.cpu_calls = 0
         self.chain_strength_prefactor = chain_strength_prefactor
 
@@ -98,6 +100,7 @@ class BaseRouter(hybrid.Runnable):
                 self.all_qpu_delay_time_per_sample.append(proxy_metrics["qpu_delay_time_per_sample"])
                 self.total_total_post_processing_time += float(proxy_metrics["total_post_processing_time"])
                 self.total_post_processing_overhead_time += float(proxy_metrics["post_processing_overhead_time"])
+                self.estimated_runtime_total += float(proxy_metrics["estimated_runtime_us"])
 
             if self.test_type == "regret":
                 regret = proxy_metrics.get("regret",False)
@@ -151,6 +154,7 @@ class BaseRouter(hybrid.Runnable):
             )
 
         successLeap = False
+        est_us = None
 
         if self.qpu_identity:
             #sono per forza in un benchamrk e dunque se ho API ho anche qpu_identity
@@ -158,42 +162,56 @@ class BaseRouter(hybrid.Runnable):
                 #gestione thread-safe dell'avvio del sampler
                 qpu_sampler = self._get_qpu_sampler(self.qpu_identity)
 
-            fixed_composite = FixedEmbeddingComposite(qpu_sampler, embedding=embedding)
+            num_phys = len({q for chain in embedding.values() for q in chain})
+            est_us = int(qpu_sampler.solver.estimate_qpu_access_time(
+                 num_qubits=num_phys,
+                 num_reads=40,
+                 annealing_time=20,
+             ))
 
-            max_retries = 3
-            retry_delay = 1.0
-            res_sampleset = None
+            
+            if not can_afford(est_us):
+               successLeap = False  #va al fallback EAP
+            else:
+                fixed_composite = FixedEmbeddingComposite(qpu_sampler, embedding=embedding)
 
-            for attempt in range(1, max_retries + 1):
-                try:
-                    t_start = time.perf_counter()
+                max_retries = 3
+                retry_delay = 1.0
+                res_sampleset = None
 
-                    res_sampleset = fixed_composite.sample(
-                        qpu_state,
-                        chain_strength=chain_strength,
-                        num_reads=40,
-                        annealing_time = 20
-                    )
-                    t_end = time.perf_counter()
-                    wall_service_time = t_end - t_start
-                    successLeap = True
-                    break
+                for attempt in range(1, max_retries + 1):
+                    try:
+                        t_start = time.perf_counter()
 
-                except (SolverError, InvalidAPIResponseError, PollingTimeout, ProblemUploadError, RequestTimeout) as e:
-                    print(f"Tentativo {attempt}/{max_retries} fallito sulla QPU: {type(e).__name__}: {e}")
-                    if attempt == max_retries:
-                        print(f"QPU non disponibile dopo {max_retries} tentativi. "
-                                        f"Procedo con il fallback locale.")
-                        #esco dal ciclo
+                        res_sampleset = fixed_composite.sample(
+                            qpu_state,
+                            chain_strength=chain_strength,
+                            num_reads=40,
+                            annealing_time = 20
+                        )
+                        t_end = time.perf_counter()
+                        wall_service_time = t_end - t_start
+                        successLeap = True
+
+                        #æggiorno conteggio calls leap
+                        self.leap_qpu_calls += 1
                         break
-                    #attesa variabile prima del prossimo tentativo
-                    sleep_time = retry_delay + random.uniform(0, 0.5)
-                    time.sleep(sleep_time)
-                    retry_delay *= 2
-                except Exception as e:
-                    #errori non temporanei nessun altro retry
-                    print(f"Errore non retryable su QPU: {type(e).__name__}: {e}")
-                    break    
+
+                    except (SolverError, InvalidAPIResponseError, PollingTimeout, ProblemUploadError, RequestTimeout) as e:
+                        print(f"Tentativo {attempt}/{max_retries} fallito sulla QPU: {type(e).__name__}: {e}")
+                        if attempt == max_retries:
+                            print(f"QPU non disponibile dopo {max_retries} tentativi. "
+                                            f"Procedo con il fallback locale.")
+                            #esco dal ciclo
+                            break
+                        #attesa variabile prima del prossimo tentativo
+                        sleep_time = retry_delay + random.uniform(0, 0.5)
+                        time.sleep(sleep_time)
+                        retry_delay *= 2
+                    except Exception as e:
+                        #errori non temporanei nessun altro retry
+                        print(f"Errore non retryable su QPU: {type(e).__name__}: {e}")
+                        break    
 
             #estrazione di timing
             if successLeap and res_sampleset is not None:
@@ -212,6 +230,9 @@ class BaseRouter(hybrid.Runnable):
                     "post_processing_overhead_time": timing_info.get('post_processing_overhead_time'),
                 }
 
+                actual_qat = qpu_full_timing['qpu_access_time']
+                charge(actual_qat)
+
                 if "chain_break_fraction" in res_sampleset.record.dtype.names:
                     cbf = res_sampleset.record.chain_break_fraction
                     weights = res_sampleset.record.num_occurrences
@@ -226,8 +247,9 @@ class BaseRouter(hybrid.Runnable):
                     "real_qpu": True,
                     "chain_break_fraction": avg_chain_break,
                     "solve_time": wall_service_time,
-                     **qpu_full_timing,
-                     **emb_metrics
+                    "estimated_runtime_us": est_us,
+                    **qpu_full_timing,
+                    **emb_metrics
                 }
 
         if not self.qpu_identity or not successLeap:              
@@ -242,11 +264,14 @@ class BaseRouter(hybrid.Runnable):
 
             ################# PER TEST LOCALE QPU_ACCESS_TIME #####################
 
-            estimated_runtime_us = OfflineQPUSolver.estimate_qpu_access_time(
-                num_qubits=len(target_bqm.variables), 
-                num_reads=40, 
-                annealing_time=20
-            )
+            if est_us is not None:
+                estimated_runtime_us = est_us
+            else:
+               estimated_runtime_us = OfflineQPUSolver.estimate_qpu_access_time(
+                   num_qubits=len(target_bqm.variables), 
+                   num_reads=40, 
+                   annealing_time=20
+               )
 
             ################################################################
 
@@ -261,6 +286,9 @@ class BaseRouter(hybrid.Runnable):
             t_unembed_0 = time.perf_counter()
             res_sampleset = unembed_sampleset(physical_sampleset, embedding, qpu_state, chain_break_method=majority_vote)
             t_unembed = time.perf_counter() - t_unembed_0
+            
+            #æggiorno conteggio calls fallback
+            self.fallback_qpu_calls += 1
 
             if "chain_break_fraction" in res_sampleset.record.dtype.names:
                 cbf = res_sampleset.record.chain_break_fraction
@@ -295,6 +323,8 @@ class BaseRouter(hybrid.Runnable):
 
         res_sampleset = final_state.subsamples
 
+        self.cpu_calls += 1
+
         if embedding:
              emb_metrics = SubQUBO.compute_advanced_embedding_metrics(embedding, state.subproblem, None)
         else:
@@ -316,12 +346,12 @@ class BaseRouter(hybrid.Runnable):
 
         if self.test_type == "regret":
             #calcolo sia ramo QPU che CPU e calcolo regret
-            if route_to_qpu:
-                with self.lock:
-                    self.qpu_calls += 1
-            else:
-                with self.lock:
-                    self.cpu_calls +=1
+            #if route_to_qpu:
+            #    with self.lock:
+            #        self.qpu_calls += 1
+            #else:
+            #    with self.lock:
+            #        self.cpu_calls +=1
 
             best_energy_qpu = None
             res_sampleset_qpu = None
@@ -353,12 +383,12 @@ class BaseRouter(hybrid.Runnable):
                 extra_metrics["regret_energy_gap"] = 0.0
 
         elif route_to_qpu:
-            self.qpu_calls += 1
+            #self.qpu_calls += 1
 
             res_sampleset, extra_metrics = self._qpu_branch(state,embedding)
 
         else:
-            self.cpu_calls += 1
+            #self.cpu_calls += 1
 
             res_sampleset, extra_metrics = self._cpu_branch(state,embedding)
 

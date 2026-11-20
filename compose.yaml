@@ -18,6 +18,9 @@ services:
     container_name: subqubo-redis
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes  #Redis scrive su disco nel volume
     networks:
       - hybrid_net
 
@@ -50,7 +53,9 @@ services:
       replicas: 1  #numero di gestori code QPU
     networks:
       - hybrid_net
-
+volumes:
+  redis_data:
+  
 networks:
   hybrid_net:
     driver: bridge

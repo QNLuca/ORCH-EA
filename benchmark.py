@@ -60,21 +60,53 @@ REGRET_DEQUE = deque([
 ])
 
 #funzione factory per generare correttamente istanze per ogni policy
-def get_policy_instance(name: str, subproblem_size: int, max_iter: int, convergence: int, embedding_time: float):
+def get_policy_instance(name: str, subproblem_size: int, max_iter: int, convergence: int, embedding_time: float, meta, bqm, global_embedding, is_all_embeddable,target_graph,seed,qpu_identity):
     if name == "always_cpu":
-        return AlwaysCPUPolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence, embedding_time=embedding_time)
+        return AlwaysCPUPolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence, embedding_time=embedding_time, meta=meta,
+                            bqm=bqm,
+                            global_embedding=global_embedding,
+                            is_all_embeddable=is_all_embeddable,
+                            target_graph=target_graph,
+                            seed=seed,
+                            qpu_identity=qpu_identity,)
     elif name == "kerberos":
-        return KerberosPolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence)
+        return KerberosPolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence, meta=meta, 
+                              qpu_identity=qpu_identity)
     elif name == "qbsolv":
-        return QBSolvPolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence)
+        return QBSolvPolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence,meta=meta, 
+                            qpu_identity=qpu_identity)
     elif name == "mqt_qao":
-        return MQTQAOPolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence, embedding_time=embedding_time)
+        return MQTQAOPolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence, embedding_time=embedding_time,meta=meta,
+                            bqm=bqm,
+                            global_embedding=global_embedding,
+                            is_all_embeddable=is_all_embeddable,
+                            target_graph=target_graph,
+                            seed=seed,
+                            qpu_identity=qpu_identity,)
     elif name == "always_qpu_embeddable":
-        return AlwaysQPUEmbeddablePolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence, embedding_time=embedding_time)
+        return AlwaysQPUEmbeddablePolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence, embedding_time=embedding_time,meta=meta,
+                                            bqm=bqm,
+                                            global_embedding=global_embedding,
+                                            is_all_embeddable=is_all_embeddable,
+                                            target_graph=target_graph,
+                                            seed=seed,
+                                            qpu_identity=qpu_identity,)
     elif name == "only_features_based":
-        return OnlyFeaturesBasedPolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence, embedding_time=embedding_time)
+        return OnlyFeaturesBasedPolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence, embedding_time=embedding_time,meta=meta,
+                                        bqm=bqm,
+                                        global_embedding=global_embedding,
+                                        is_all_embeddable=is_all_embeddable,
+                                        target_graph=target_graph,
+                                        seed=seed,
+                                        qpu_identity=qpu_identity,)
     elif name == "only_ea_based":
-        return OnlyEABasedPolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence, embedding_time=embedding_time)
+        return OnlyEABasedPolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence, embedding_time=embedding_time,meta=meta,
+                                    bqm=bqm,
+                                    global_embedding=global_embedding,
+                                    is_all_embeddable=is_all_embeddable,
+                                    target_graph=target_graph,
+                                    seed=seed,
+                                    qpu_identity=qpu_identity,)
     else:
         raise ValueError(f"Policy sconosciuta: {name}")
 
@@ -161,10 +193,7 @@ def run_comparative_suite(bqm: dimod.BinaryQuadraticModel, orchestratorEA: Embed
                             subproblem_size=subproblem_size, 
                             max_iter=max_iter, 
                             convergence=convergence, 
-                            embedding_time=embedding_time
-                        )
-
-                        res = policy_obj.solve(
+                            embedding_time=embedding_time,
                             meta=meta,
                             bqm=bqm,
                             global_embedding=global_embedding,
@@ -172,6 +201,16 @@ def run_comparative_suite(bqm: dimod.BinaryQuadraticModel, orchestratorEA: Embed
                             target_graph=target_graph,
                             seed=minorminer_seed,
                             qpu_identity=qpu_identity,
+                        )
+
+                        res = policy_obj.solve(
+                            #meta=meta,
+                            #bqm=bqm,
+                            #global_embedding=global_embedding,
+                            #is_all_embeddable=is_all_embeddable,
+                            #target_graph=target_graph,
+                            #seed=minorminer_seed,
+                            #qpu_identity=qpu_identity,
                         )
 
                     results.append(res)
@@ -202,9 +241,7 @@ def run_comparative_suite(bqm: dimod.BinaryQuadraticModel, orchestratorEA: Embed
                     subproblem_size=subproblem_size, 
                     max_iter=max_iter, 
                     convergence=convergence, 
-                    embedding_time=embedding_time
-                )
-                res = policy_obj.solve(
+                    embedding_time=embedding_time,
                     meta=meta,
                     bqm=bqm,
                     global_embedding=global_embedding,
@@ -212,6 +249,15 @@ def run_comparative_suite(bqm: dimod.BinaryQuadraticModel, orchestratorEA: Embed
                     target_graph=target_graph,
                     seed=seed,
                     qpu_identity=qpu_identity,
+                )
+                res = policy_obj.solve(
+                    #meta=meta,
+                    #bqm=bqm,
+                    #global_embedding=global_embedding,
+                    #is_all_embeddable=is_all_embeddable,
+                    #target_graph=target_graph,
+                    #seed=seed,
+                    #qpu_identity=qpu_identity,
                     test_type = test_type
                 )
             results.append(res)
@@ -375,9 +421,11 @@ def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_d
             sampler = DWaveSampler(topology__type="zephyr")
             qpu_identity = sampler.solver.identity
             target_graph = sampler.to_networkx_graph()
+    
 
     for idx, filepath in enumerate(todo_files, 1):
         fname = os.path.basename(filepath)
+        status_dict['current_file'] = fname
         print(f"\n[{idx}/{len(todo_files)}] embedding su {fname}...")
         t0 = time.perf_counter()
 

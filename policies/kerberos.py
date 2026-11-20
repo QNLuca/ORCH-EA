@@ -13,10 +13,6 @@ from dotenv import load_dotenv
 
 from utils.mockSolverOffline import OfflineQPUSolver
 
-#carica le variabili contenute nel file .env
-load_dotenv()
-
-DWAVE_API_KEY = os.getenv("DWAVE_API_TOKEN")
 
 class QPUTimeEstimator(hybrid.Runnable):
     """Intercetta i sub-problemi nel ramo QPU e accumula il tempo stimato."""
@@ -60,18 +56,19 @@ class KerberosPolicy(BasePolicy):
     def __init__(self, **kwargs):
         super().__init__(name="kerberos", **kwargs)
 
-    def solve(self, meta, bqm, seed, global_embedding,
-                is_all_embeddable, qpu_identity, target_graph=None, test_type = "normal") -> Dict[str, Any]:
-        lp_filename = meta.get("lp_filename", None)
-        bestknown_solution = float(meta.get("bestknown_solution",None))
+    def solve(self, 
+              #meta, bqm, seed, global_embedding,is_all_embeddable, qpu_identity, target_graph=None, 
+              test_type = "normal") -> Dict[str, Any]:
+        lp_filename = self.meta.get("lp_filename", None)
+        bestknown_solution = float(self.meta.get("bestknown_solution",None))
 
-        invert_func = meta.get("invert_func", None)
+        invert_func = self.meta.get("invert_func", None)
                 
-        cqm = meta.get("cqm",None)
+        cqm = self.meta.get("cqm",None)
 
-        is_maximize = meta.get("is_maximize", False)
+        is_maximize = self.meta.get("is_maximize", False)
 
-        mybqm = SubQUBO(bqm)
+        mybqm = SubQUBO(self.bqm)
         
         bqm_num_vars = mybqm.num_variables
         bqm_avg_degree = mybqm.average_degree
@@ -85,19 +82,18 @@ class KerberosPolicy(BasePolicy):
             "estimated_leap_qpu_time_us": 0.0
         }
 
-        if DWAVE_API_KEY:
-            if qpu_identity:
-                qpu_sampler = DWaveSampler(solver=dict(identity=qpu_identity))
-            else:
-                qpu_sampler = DWaveSampler(solver={'topology__type': 'zephyr'})
+        real_kerberos = False
+        if self.qpu_identity:
+            qpu_sampler = DWaveSampler(solver=dict(identity=self.qpu_identity))
 
-            qpu_branch = hybrid.Kerberos(max_iter=self.max_iter,convergence=self.convergence, 
+            workflow = hybrid.Kerberos(max_iter=self.max_iter,convergence=self.convergence, 
                                                   qpu_reads = 40, qpu_params={'annealing_time': 20}, sa_reads=20,sa_sweeps=1000,tabu_timeout=200,
-                                                   max_subproblem_size=self.subproblem_size, qpu_sampler=qpu_sampler)
+                                                   max_subproblem_size=min(self.subproblem_size, bqm_num_vars), qpu_sampler=qpu_sampler)
+            real_kerberos = True
         else:
             qpu_branch = (
                         hybrid.EnergyImpactDecomposer(
-                            size=min(self.subproblem_size, len(bqm.variables)),
+                            size=min(self.subproblem_size, bqm_num_vars),
                             rolling=True,
                             rolling_history=0.3,
                             traversal='bfs'
@@ -109,32 +105,33 @@ class KerberosPolicy(BasePolicy):
                         | hybrid.SplatComposer()
                     )
 
-        # Rami CPU
-        tabu_branch = (  
-            RaceCounter(calls, "cpu_tabu_calls")
-            | hybrid.InterruptableTabuSampler(timeout=500)
-        )
-
-        sa_global_branch = (
-            RaceCounter(calls, "cpu_sa_calls")
-            | hybrid.SimulatedAnnealingProblemSampler(num_reads=1, num_sweeps=10000)
-        )
-
-        iteration = hybrid.Loop(
-            hybrid.Race(
-                hybrid.BlockingIdentity(),
-                tabu_branch,
-                sa_global_branch,
-                qpu_branch
-            ) | hybrid.ArgMin(),
-            max_iter=self.max_iter,
-            convergence=self.convergence
-        )
-
+            # Rami CPU
+            tabu_branch = (  
+                RaceCounter(calls, "cpu_tabu_calls")
+                | hybrid.InterruptableTabuSampler(timeout=500)
+            )
+            sa_global_branch = (
+                RaceCounter(calls, "cpu_sa_calls")
+                | hybrid.SimulatedAnnealingProblemSampler(num_reads=1, num_sweeps=10000)
+            )
+            workflow = hybrid.Loop(
+                hybrid.Race(
+                    hybrid.BlockingIdentity(),
+                    tabu_branch,
+                    sa_global_branch,
+                    qpu_branch
+                ) | hybrid.ArgMin(),
+                max_iter=self.max_iter,
+                convergence=self.convergence
+            )
+            
         start_time = time.perf_counter()
-        init_sample = dimod.SimulatedAnnealingSampler().sample(bqm, num_reads=1).first.sample
-        init_state = hybrid.State.from_sample(init_sample, bqm)
-        final_state = iteration.run(init_state).result()
+            
+        init_sample = dimod.SimulatedAnnealingSampler().sample(self.bqm, num_reads=1).first.sample
+            
+        init_state = hybrid.State.from_sample(init_sample, self.bqm)
+        
+        final_state = workflow.run(init_state).result()
 
         total_wall_clock = time.perf_counter() - start_time
 
@@ -159,7 +156,7 @@ class KerberosPolicy(BasePolicy):
 
         return {
             "instance_id": lp_filename,
-            "seed": seed,
+            "seed": self.seed,
             "num_vars": bqm_num_vars,
             "avg_degree": bqm_avg_degree,
             "density": bqm_density,
@@ -171,8 +168,10 @@ class KerberosPolicy(BasePolicy):
             "rel_gap": rel_gap,
             "wall_clock_time": total_wall_clock,
             "qpu_calls": total_qpu,
+            "leap_qpu_calls": total_qpu if real_kerberos else 0,
             "cpu_calls": total_cpu,
-            "qpu_utilization_ratio": total_qpu/total_calls if total_calls > 0 else 0.0,
+            "qpu_utilization_ratio": total_qpu/total_calls if total_calls > 0 and not real_kerberos else 0.0,
+            "real_qpu_utilization_ratio": total_qpu / total_calls if total_calls > 0 and real_kerberos else 0.0,
             
             **cqmResults,
             "estimated_leap_qpu_time_us": calls["estimated_leap_qpu_time_us"],

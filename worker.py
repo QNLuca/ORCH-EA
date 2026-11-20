@@ -20,6 +20,7 @@ from dwave.cloud.exceptions import SolverError, InvalidAPIResponseError, Polling
 import random
 
 from subQUBO import SubQUBO
+from utils.leapBudget import can_afford, charge
 from dotenv import load_dotenv
 
 #carica le variabili contenute nel file .env
@@ -136,74 +137,87 @@ def qpu_branch(sub_bqm, embedding, rq_job, chain_strength_prefactor: float = Non
 
     successLeap = False
     qpu_sampler = None
+    est_us = None
     try:
         if DWAVE_API_TOKEN: 
              if qpu_identity:
                  qpu_sampler = DWaveSampler(solver=dict(identity=qpu_identity)) 
-             else: 
-                #qpu_identity = DWaveSampler(solver={'topology__type': 'zephyr'})
+             else:
                 qpu_sampler = DWaveSampler(solver={'topology__type': 'zephyr'})
                 qpu_identity = qpu_sampler.solver.identity
 
-             fixed_composite = FixedEmbeddingComposite(qpu_sampler, embedding=embedding)
-             max_retries = 3
-             retry_delay = 1.0
-             res_sampleset = None
-             for attempt in range(1, max_retries + 1):
-                 try:
-                     t_start = time.perf_counter()
-                     job_label = f"rq_{rq_job.id}_att_{attempt}"
+             num_phys = len({q for chain in embedding.values() for q in chain})
+             est_us = int(qpu_sampler.solver.estimate_qpu_access_time(
+                 num_qubits=num_phys,
+                 num_reads=40,
+                 annealing_time=20,
+             ))
 
-                     res_sampleset = fixed_composite.sample(
-                         sub_bqm,
-                         chain_strength=chain_strength,
-                         num_reads=40,
-                         annealing_time=20,
-                         label=job_label,
-                     )
+             if not can_afford(est_us):
+                successLeap = False  #va al fallback EAP
+             else:
+                fixed_composite = FixedEmbeddingComposite(qpu_sampler, embedding=embedding)
+                max_retries = 3
+                retry_delay = 1.0
+                res_sampleset = None
+                for attempt in range(1, max_retries + 1):
+                    try:
+                        t_start = time.perf_counter()
+                        job_label = f"rq_{rq_job.id}_att_{attempt}"
 
-                     #registro subito problem_id su Redis PRIMA dell'attesa bloccante
-                     problem_id = res_sampleset.wait_id()
-                     if rq_job:
-                         rq_job.meta["dwave_problem_id"] = problem_id
-                         rq_job.meta["dwave_status"] = "WAITING_QPU"
-                         rq_job.meta["t_submit"] = t_start
-                         rq_job.save_meta()
+                        res_sampleset = fixed_composite.sample(
+                            sub_bqm,
+                            chain_strength=chain_strength,
+                            num_reads=40,
+                            annealing_time=20,
+                            label=job_label,
+                        )
 
-                     #attesa bloccante, interrotta in modo pulito da SIGALRM se scade il timeout RQ
-                     res_sampleset.resolve()
+                        #registro subito problem_id su Redis PRIMA dell'attesa bloccante
+                        problem_id = res_sampleset.wait_id()
+                        if rq_job:
+                            rq_job.meta["dwave_problem_id"] = problem_id
+                            rq_job.meta["dwave_status"] = "WAITING_QPU"
+                            rq_job.meta["t_submit"] = t_start
+                            rq_job.save_meta()
 
-                     t_end = time.perf_counter()
-                     wall_service_time = t_end - t_start
-                     successLeap = True
-                     break  #successo, esco dal ciclo
+                        #attesa bloccante, interrotta in modo pulito da SIGALRM se scade il timeout RQ
+                        res_sampleset.resolve()
 
-                 except JobTimeoutException:
-                     #eccezione attivata da segnale SIGALRM su Linux: registra lo stato e raise per attivare on_failure
-                     print(f"[TIMEOUT RQ] Scaduto timeout durante attesa QPU (problem_id={rq_job.meta.get('dwave_problem_id') if rq_job else None})")
-                     if rq_job:
-                         rq_job.meta["dwave_status"] = "TIMED_OUT_ON_RQ"
-                         rq_job.save_meta()
-                     raise
+                        t_end = time.perf_counter()
+                        wall_service_time = t_end - t_start
+                        successLeap = True
+                        break  #successo, esco dal ciclo
 
-                 except (SolverError, InvalidAPIResponseError, PollingTimeout, ProblemUploadError, RequestTimeout) as e:
-                     print(f"Tentativo {attempt}/{max_retries} fallito sulla QPU: {type(e).__name__}: {e}")
-                     if attempt == max_retries:
-                         print(f"QPU non disponibile dopo {max_retries} tentativi. "
-                                         f"Procedo con il fallback locale.")
-                         #esco dal ciclo
-                         break
-                     #attesa variabile prima del prossimo tentativo
-                     sleep_time = retry_delay + random.uniform(0, 0.5)
-                     time.sleep(sleep_time)
-                     retry_delay *= 2
-                 except Exception as e:
-                     #errori non temporanei nessun altro retry
-                     print(f"Errore non retryable su QPU: {type(e).__name__}: {e}")
-                     break
-             #estrazione di timing
-             if successLeap and res_sampleset is not None:
-                 extra_metrics = _build_qpu_metrics(res_sampleset, embedding, sub_bqm, wall_service_time)
+                    except JobTimeoutException:
+                        #eccezione attivata da segnale SIGALRM su Linux: registra lo stato e raise per attivare on_failure
+                        print(f"[TIMEOUT RQ] Scaduto timeout durante attesa QPU (problem_id={rq_job.meta.get('dwave_problem_id') if rq_job else None})")
+                        if rq_job:
+                            rq_job.meta["dwave_status"] = "TIMED_OUT_ON_RQ"
+                            rq_job.save_meta()
+                        raise
+
+                    except (SolverError, InvalidAPIResponseError, PollingTimeout, ProblemUploadError, RequestTimeout) as e:
+                        print(f"Tentativo {attempt}/{max_retries} fallito sulla QPU: {type(e).__name__}: {e}")
+                        if attempt == max_retries:
+                            print(f"QPU non disponibile dopo {max_retries} tentativi. "
+                                            f"Procedo con il fallback locale.")
+                            #esco dal ciclo
+                            break
+                        #attesa variabile prima del prossimo tentativo
+                        sleep_time = retry_delay + random.uniform(0, 0.5)
+                        time.sleep(sleep_time)
+                        retry_delay *= 2
+                    except Exception as e:
+                        #errori non temporanei nessun altro retry
+                        print(f"Errore non retryable su QPU: {type(e).__name__}: {e}")
+                        break
+                #estrazione di timing
+                if successLeap and res_sampleset is not None:
+                    extra_metrics = _build_qpu_metrics(res_sampleset, embedding, sub_bqm, wall_service_time)
+                    extra_metrics['estimated_runtime_us'] = est_us
+                    actual_qat = extra_metrics['qpu_access_time']
+                    charge(actual_qat)
 
         if not DWAVE_API_TOKEN or not successLeap:
 
@@ -236,11 +250,14 @@ def qpu_branch(sub_bqm, embedding, rq_job, chain_strength_prefactor: float = Non
              t_unembed = time.perf_counter() - t_unembed_0
 
              ################# PER TEST LOCALE QPU_ACCESS_TIME #####################
-             estimated_runtime_us = OfflineQPUSolver.estimate_qpu_access_time(
-                 num_qubits=len(target_bqm.variables), 
-                 num_reads=40, 
-                 annealing_time=20
-             )
+             if est_us is not None:
+                 estimated_runtime_us = est_us
+             else:
+                estimated_runtime_us = OfflineQPUSolver.estimate_qpu_access_time(
+                    num_qubits=len(target_bqm.variables), 
+                    num_reads=40, 
+                    annealing_time=20
+                )
              ################################################################
              res_sampleset = logical_sampleset
 

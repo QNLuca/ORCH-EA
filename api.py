@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 
 import traceback
 import logging
+from utils.leapBudget import init_budget_once, get_status
 from version import __version__
 
 #carica le variabili contenute nel file .env
@@ -221,6 +222,10 @@ def run_benchmark_pipeline(job_id: str, req: LPUrlRequest):
 
 def background_benchmark_task(req: BenchmarkRequest):
     global benchmark_status
+
+    total_budget_us = 180 * 1_000_000
+    init_budget_once(int(total_budget_us))  #in microsecondi, inizializzo solo la prima volta
+    print("Leap budget:", get_status())
     
     if req.ablation_test:
         test_type = "ablation"
@@ -297,7 +302,7 @@ def start_benchmark(request: BenchmarkRequest, background_tasks: BackgroundTasks
 
 @app.get("/benchmark-local-files-status")
 def get_benchmark_status():
-    return benchmark_status
+    return {**benchmark_status, "leap_budget": get_status()}
 
 @app.get("/status/{job_id}")
 def get_job_status(job_id: str) -> Dict[str, Any]:

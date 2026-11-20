@@ -61,18 +61,19 @@ class QBSolvPolicy(BasePolicy):
     def __init__(self, **kwargs):
         super().__init__(name="qbsolv", **kwargs)
 
-    def solve(self, meta, bqm, global_embedding,
-                is_all_embeddable,seed, qpu_identity, target_graph=None, test_type = "normal") -> Dict[str, Any]:
-        lp_filename = meta.get("lp_filename", None)
-        bestknown_solution = float(meta.get("bestknown_solution",None))
+    def solve(self, 
+              #meta, bqm, global_embedding,is_all_embeddable,seed, qpu_identity, target_graph=None, 
+              test_type = "normal") -> Dict[str, Any]:
+        lp_filename = self.meta.get("lp_filename", None)
+        bestknown_solution = float(self.meta.get("bestknown_solution",None))
 
-        invert_func = meta.get("invert_func", None)
+        invert_func = self.meta.get("invert_func", None)
                 
-        cqm = meta.get("cqm",None)
+        cqm = self.meta.get("cqm",None)
 
-        is_maximize = meta.get("is_maximize", False)
+        is_maximize = self.meta.get("is_maximize", False)
 
-        mybqm = SubQUBO(bqm)
+        mybqm = SubQUBO(self.bqm)
         
         bqm_num_vars = mybqm.num_variables
         bqm_avg_degree = mybqm.average_degree
@@ -84,17 +85,17 @@ class QBSolvPolicy(BasePolicy):
             "estimated_leap_qpu_time_us": 0.0
         }
 
-        if DWAVE_API_KEY:
-            if qpu_identity:
-                qpu_sampler = DWaveSampler(solver=dict(identity=qpu_identity))
-            else:
-                qpu_sampler = DWaveSampler(solver={'topology__type': 'zephyr'})
+        real_qbsolv = False
+        if self.qpu_identity:
+            qpu_sampler = DWaveSampler(solver=dict(identity=self.qpu_identity))
 
             qpu_branch = hybrid.QPUSubproblemAutoEmbeddingSampler(
-                            qpu_sampler=qpu_sampler,
-                            num_reads=40,
-                            sampling_params={'annealing_time': 20}
-                            )
+                        qpu_sampler=qpu_sampler,
+                        num_reads=40,
+                        sampling_params={'annealing_time': 20}
+                        )
+            
+            real_qbsolv = True
         else:
             qpu_branch = hybrid.SimulatedAnnealingSubproblemSampler()
         
@@ -102,7 +103,7 @@ class QBSolvPolicy(BasePolicy):
         iteration = hybrid.Race(
             RaceCounter(calls, "cpu_calls")
             | hybrid.InterruptableTabuSampler(),
-            hybrid.EnergyImpactDecomposer(size=min(self.subproblem_size, len(bqm.variables)), rolling=True, rolling_history=0.15)
+            hybrid.EnergyImpactDecomposer(size=min(self.subproblem_size, bqm_num_vars), rolling=True, rolling_history=0.15)
             | hybrid.Const(subsamples=None) #reset subsamples
             | RaceCounter(calls, "qpu_calls")
             | QPUTimeEstimator(calls, "estimated_leap_qpu_time_us", num_reads=40, annealing_time=20)
@@ -113,8 +114,8 @@ class QBSolvPolicy(BasePolicy):
         main = hybrid.Loop(iteration, max_iter=self.max_iter, convergence=self.convergence)
         
         start_time = time.perf_counter()
-        init_sample = dimod.SimulatedAnnealingSampler().sample(bqm, num_reads=1).first.sample
-        init_state = hybrid.State.from_sample(init_sample, bqm)
+        init_sample = dimod.SimulatedAnnealingSampler().sample(self.bqm, num_reads=1).first.sample
+        init_state = hybrid.State.from_sample(init_sample, self.bqm)
         final_state = main.run(init_state).result()
 
         total_wall_clock = time.perf_counter() - start_time
@@ -140,7 +141,7 @@ class QBSolvPolicy(BasePolicy):
         
         return {
             "instance_id": lp_filename,
-            "seed": seed,
+            "seed": self.seed,
             "num_vars": bqm_num_vars,
             "avg_degree": bqm_avg_degree,
             "density": bqm_density,
@@ -152,8 +153,10 @@ class QBSolvPolicy(BasePolicy):
             "rel_gap": rel_gap,
             "wall_clock_time": total_wall_clock,
             "qpu_calls": total_qpu,
+            "leap_qpu_calls": total_qpu if real_qbsolv else 0,
             "cpu_calls": total_cpu,
-            "qpu_utilization_ratio": total_qpu/total_calls if total_calls > 0 else 0.0,
+            "qpu_utilization_ratio": total_qpu/total_calls if total_calls > 0 and not real_qbsolv else 0.0,
+            "real_qpu_utilization_ratio": total_qpu / total_calls if total_calls > 0 and real_qbsolv else 0.0,
             
             **cqmResults,
             "estimated_leap_qpu_time_us": calls["estimated_leap_qpu_time_us"],
