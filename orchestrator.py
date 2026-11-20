@@ -733,10 +733,11 @@ class EmbeddingAwareOrchestrator:
                 "is_maximization_objective": is_maximize,
                 "policy": self.policy_name,
                 "qpu_calls": 1,
+                "leap_qpu_calls": 1 if successLeap else 0,
                 "cpu_calls": 0,
                 "qpu_utilization_ratio": 1.0,
-                #"tp": 1 if good_embedding else 0, 
-                #"fp": 1 if not good_embedding else 0, "tn": 0, "fn": 0,
+                "real_qpu_utilization_ratio": 1.0 if successLeap else 0.0,
+
                 #Soluzione e Gap
                 "best_energy": best_energy,
                 "qplib_reference": bestknown_solution,
@@ -779,7 +780,7 @@ class EmbeddingAwareOrchestrator:
 
         decomposer = hybrid.Unwind(
             hybrid.EnergyImpactDecomposer(
-                size=min(effective_sub_size, len(bqm.variables)), 
+                size=min(effective_sub_size, bqm_num_vars), 
                 rolling=True, 
                 rolling_history=0.3, 
                 traversal="bfs"

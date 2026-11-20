@@ -251,7 +251,7 @@ class BasePolicy(ABC):
 
             total_wall_clock = final_time + self.embedding_time
 
-              #best_sample = dict(res_sampleset.first.sample)
+            #best_sample = dict(res_sampleset.first.sample)
             
             emb_metrics = SubQUBO.compute_advanced_embedding_metrics(self.global_embedding,self.bqm,avg_chain_break)
 
@@ -294,11 +294,10 @@ class BasePolicy(ABC):
                 "rel_gap": rel_gap,
                 "wall_clock_time": total_wall_clock,
                 "time_global_embedding": self.embedding_time,
-                "qpu_calls": 1 if not successLeap else 0,
+                "qpu_calls": 1,
                 "leap_qpu_calls": 1 if successLeap else 0,
                 "cpu_calls": 0,
-
-                "qpu_utilization_ratio": 1.0 if not successLeap else 0.0,
+                "qpu_utilization_ratio": 1.0,
                 "real_qpu_utilization_ratio": 1.0 if successLeap else 0.0,
 
                 "chain_break_fraction": avg_chain_break,
