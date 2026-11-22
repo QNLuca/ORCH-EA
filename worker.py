@@ -267,7 +267,7 @@ def qpu_branch(sub_bqm, embedding, rq_job, chain_strength_prefactor: float = Non
                  avg_chain_break = float(np.average(cbf, weights=weights)) if len(cbf) > 0 else 0.0
              else:
                  chain_break_fraction = list(chain_break_frequency(physical_sampleset, embedding).values()) # Returns: dict: Frequency of chain breaks as a dict in the form {s: f, ...},  where s is a variable in the source graph, and frequency, a float, is the fraction of broken chains.                       
-                 avg_chain_break = np.mean(chain_break_fraction) if len(chain_break_fraction) > 0 else 0.0
+                 avg_chain_break = float(np.mean(chain_break_fraction)) if len(chain_break_fraction) > 0 else 0.0
 
              emb_metrics = SubQUBO.compute_advanced_embedding_metrics(embedding, sub_bqm, avg_chain_break)
 
@@ -278,7 +278,7 @@ def qpu_branch(sub_bqm, embedding, rq_job, chain_strength_prefactor: float = Non
                  "physical_build_time": t_build,
                  "solve_time": t_solve,
                  "unembed_time": t_unembed,
-                 "estimated_runtime_us": estimated_runtime_us,
+                 "estimated_leap_qpu_time_us": estimated_runtime_us,
                  "chain_break_fraction": avg_chain_break,
                  **emb_metrics
              }
@@ -307,13 +307,6 @@ def cpu_branch(sub_bqm, embedding = None):
     else:
         emb_metrics = {
             "has_embedding": False,
-            #"eqi": 0.0,
-            #"max_chain": 0,
-            #"mean_chain": 0.0,
-            #"median_chain": 0.0,
-            #"physical_nodes": 0,
-            #"expansion": 0.0,
-            #"long_chain_fraction": 0.0,
             "good_embedding": False
         }
 
@@ -341,7 +334,7 @@ def solve_subqubo_rq(sub_bqm: dimod.BinaryQuadraticModel,
             res_sampleset_qpu = None
             if embedding is not None:
                 #senza embedding non posso passarlo al ramo QPU
-                res_sampleset_qpu, extra_metrics_qpu = qpu_branch(sub_bqm,embedding,rq_job=rq_job,chain_strength_prefactor=chain_strength_prefactor,qpu_identity=qpu_identity)
+                res_sampleset_qpu, extra_metrics_qpu = qpu_branch(sub_bqm,embedding,rq_job=rq_job,chain_strength_prefactor=chain_strength_prefactor,qpu_identity=qpu_identity, real_qpu_path=real_qpu_path)
                 best_energy_qpu = res_sampleset_qpu.first.energy
             
             res_sampleset_cpu, extra_metrics_cpu = cpu_branch(sub_bqm,embedding)
@@ -371,7 +364,7 @@ def solve_subqubo_rq(sub_bqm: dimod.BinaryQuadraticModel,
         elif sampler_type == "qpu_queue":
             #ho un embedding
 
-            res_sampleset, extra_metrics = qpu_branch(sub_bqm,embedding,rq_job=rq_job,chain_strength_prefactor=chain_strength_prefactor,qpu_identity=qpu_identity)
+            res_sampleset, extra_metrics = qpu_branch(sub_bqm,embedding,rq_job=rq_job,chain_strength_prefactor=chain_strength_prefactor,qpu_identity=qpu_identity, real_qpu_path=real_qpu_path)
             
         else: #cpu_queue
 

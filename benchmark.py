@@ -155,10 +155,11 @@ def run_comparative_suite(bqm: dimod.BinaryQuadraticModel, orchestratorEA: Embed
     if seed is None:
         seed = random.randint(0,10)
 
-    if DWAVE_API_TOKEN and target_graph is None and real_qpu_path:
-        sampler = DWaveSampler(topology__type="zephyr")
-        qpu_identity = sampler.solver.identity
-        target_graph = sampler.to_networkx_graph()
+    if DWAVE_API_TOKEN and real_qpu_path:
+        if target_graph is None or qpu_identity is None:
+            sampler = DWaveSampler(topology__type="zephyr")
+            qpu_identity = sampler.solver.identity
+            target_graph = sampler.to_networkx_graph()
     else:
         target_graph = dnx.zephyr_graph(12)
         qpu_identity = None
@@ -336,9 +337,15 @@ def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_d
         return {"status": "error", "message": msg}
 
     if test_type in ("regret", "ablation"):
-        policiesDeque = REGRET_DEQUE if test_type == "regret" else ABLATION_DEQUE
+        if real_qpu_path and test_type == "regret":
+            policiesDeque = REGRET_DEQUE_QPU
+        else:
+            policiesDeque = REGRET_DEQUE if test_type == "regret" else ABLATION_DEQUE
     else:
-        policiesDeque = POLICY_DEQUE
+        if real_qpu_path:
+            policiesDeque = POLICY_DEQUE_QPU
+        else:
+            policiesDeque = POLICY_DEQUE
 
     if n_instances != 45:
         jsonFile = f"{n_instances}instances.json"
@@ -364,10 +371,12 @@ def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_d
     os.makedirs(results_dir, exist_ok=True) #assicura che la cartella esista
 
     code_version = status_dict["code_version"]
-    base_name = f"orchestrator_test_results_{test_type}.{code_version}"
-    suffix = ".parquet"
+    if DWAVE_API_TOKEN and real_qpu_path:
+        parquet_name = f"real_qpu_orchestrator_test_results_{test_type}.{code_version}.parquet"
+    else:
+        parquet_name = f"orchestrator_test_results_{test_type}.{code_version}.parquet"
 
-    orchestrators_results = os.path.join(results_dir, f"{base_name}{suffix}")
+    orchestrators_results = os.path.join(results_dir, f"{parquet_name}")
 
     json_metadata_path = orchestrators_results.replace(".parquet", ".json")
 
@@ -396,6 +405,12 @@ def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_d
     max_iter = 10
     convergence = 3
 
+    #Advantage2_system1, graph_id: 01b03fc8dc
+    qpu_identity = {
+    "name": "Advantage2_system1",
+    "version": {"graph_id": "01b03fc8dc"},
+    }
+
     #in caso di ripresa dei test, recupero seed da file json già esistente
     if os.path.exists(json_metadata_path):
         with open(json_metadata_path, "r", encoding="utf-8") as f:
@@ -421,13 +436,6 @@ def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_d
             json.dump(experiment_metadata, f, indent=4)
         print(f"Creato file di metadati JSON: {json_metadata_path}")
 
-    target_graph=dnx.zephyr_graph(12)
-
-    #Advantage2_system1, graph_id: 01b03fc8dc
-    qpu_identity = {
-    "name": "Advantage2_system1",
-    "version": {"graph_id": "01b03fc8dc"},
-    }
 
     if DWAVE_API_TOKEN and real_qpu_path:
         if qpu_identity:
@@ -437,7 +445,8 @@ def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_d
             sampler = DWaveSampler(topology__type="zephyr")
             qpu_identity = sampler.solver.identity
             target_graph = sampler.to_networkx_graph()
-    
+    else:
+        target_graph=dnx.zephyr_graph(12)
 
     for idx, filepath in enumerate(todo_files, 1):
         fname = os.path.basename(filepath)

@@ -1,5 +1,4 @@
 import os
-import random
 import time
 from typing import Any, Dict
 import dimod
@@ -11,16 +10,7 @@ from subQUBO import SubQUBO
 from policies.basePolicy import BasePolicy
 from policies.baseRouter import BaseRouter
 
-from dwave.embedding import embed_bqm, unembed_sampleset, chain_break_frequency
-from dwave.embedding.chain_breaks import majority_vote
-from dwave.embedding.chain_strength import uniform_torque_compensation
-
-from dwave.system import DWaveSampler, FixedEmbeddingComposite
-from dwave.cloud.exceptions import SolverError, InvalidAPIResponseError, PollingTimeout, ProblemUploadError, RequestTimeout
 from dotenv import load_dotenv
-
-from utils.leapBudget import can_afford, charge
-from utils.mockSolverOffline import OfflineQPUSolver
 
 #carica le variabili contenute nel file .env
 load_dotenv()
@@ -47,12 +37,17 @@ class OnlyEARouter(BaseRouter):
         t_route0 = time.perf_counter()
         chain_lengths = [len(chain) for chain in embedding.values()] if embedding else []
         max_chain = max(chain_lengths) if chain_lengths else float('inf')
+
+        if self.real_qpu_path:
+            max_expansion = 2.0
+        else:
+            max_expansion = 5.0
         
         physical_nodes = sum(chain_lengths)
         
         expansion = physical_nodes / sub_qubo_num_vars if sub_qubo_num_vars > 0 else 0.0
 
-        is_qpu_ready = max_chain <= max_chain_length and expansion <= 5.0
+        is_qpu_ready = max_chain <= max_chain_length and expansion <= max_expansion
         
         route_to_qpu = is_embeddable and is_qpu_ready
         t_route = time.perf_counter() - t_route0
@@ -72,7 +67,7 @@ class OnlyEARouter(BaseRouter):
 
 class OnlyEABasedPolicy(BasePolicy):
     def __init__(self, **kwargs):
-        super().__init__(name="only_EA_based", **kwargs)
+        super().__init__(name="only_EA", **kwargs)
 
     def solve(self, test_type = "normal", real_qpu_path=False) -> Dict[str, Any]:
         
@@ -84,6 +79,11 @@ class OnlyEABasedPolicy(BasePolicy):
 
         max_chain_length = 7
 
+        if real_qpu_path:
+            max_expansion_global = 2.0
+        else:
+            max_expansion_global = 5.0
+
         chain_lengths_global = [len(chain) for chain in self.global_embedding.values()] if self.global_embedding else []
         max_chain_global = max(chain_lengths_global) if chain_lengths_global else float('inf')
 
@@ -91,7 +91,7 @@ class OnlyEABasedPolicy(BasePolicy):
 
         expansion_global = physical_nodes / bqm_num_vars if bqm_num_vars > 0 else 0.0
 
-        is_qpu_ready = max_chain_global <= max_chain_length and expansion_global <= 5.0
+        is_qpu_ready = max_chain_global <= max_chain_length and expansion_global <= max_expansion_global
 
         start_time = time.perf_counter()
         

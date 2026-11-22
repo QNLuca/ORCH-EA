@@ -1,5 +1,4 @@
 import os
-import random
 import time
 from typing import Any, Dict
 import dimod
@@ -11,16 +10,7 @@ from subQUBO import SubQUBO
 from policies.basePolicy import BasePolicy
 from policies.baseRouter import BaseRouter
 
-from dwave.embedding import embed_bqm, unembed_sampleset, chain_break_frequency
-from dwave.embedding.chain_breaks import majority_vote
-from dwave.embedding.chain_strength import uniform_torque_compensation
-
-from dwave.system import DWaveSampler, FixedEmbeddingComposite
-from dwave.cloud.exceptions import SolverError, InvalidAPIResponseError, PollingTimeout, ProblemUploadError, RequestTimeout
 from dotenv import load_dotenv
-
-from utils.leapBudget import can_afford, charge
-from utils.mockSolverOffline import OfflineQPUSolver
 
 #carica le variabili contenute nel file .env
 load_dotenv()

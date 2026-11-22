@@ -1,5 +1,4 @@
 import os
-import random
 import hybrid
 import dimod
 import time
@@ -8,14 +7,9 @@ import pickle
 import pandas as pd
 import numpy as np
 
-from dwave.embedding import embed_bqm, unembed_sampleset, chain_break_frequency
-from dwave.embedding.chain_breaks import majority_vote
-from dwave.embedding.chain_strength import uniform_torque_compensation
-
 from utils.cqmUtilities import CqmUtilities
 from policies.basePolicy import BasePolicy
 from policies.baseRouter import BaseRouter
-from dwave.cloud.exceptions import SolverError, InvalidAPIResponseError, PollingTimeout, ProblemUploadError, RequestTimeout
 
 #per sopprimere warning sklearn, tornare indietro di versione romperebbe l'attuale versione di Ocean SDK D-Wave 
 import warnings
@@ -23,11 +17,7 @@ from sklearn.exceptions import InconsistentVersionWarning
 
 from subQUBO import SubQUBO
 
-from dwave.system import DWaveSampler, FixedEmbeddingComposite
 from dotenv import load_dotenv
-
-from utils.leapBudget import can_afford, charge
-from utils.mockSolverOffline import OfflineQPUSolver
 
 #carica le variabili contenute nel file .env
 load_dotenv()

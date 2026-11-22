@@ -176,7 +176,7 @@ class AsyncRedisDispatcherSampler(hybrid.Runnable):
                             if from_qpu and not real_qpu:
                                 self.total_build_time += float(proxy_metrics["physical_build_time"])
                                 self.total_unembed_time += float(proxy_metrics["unembed_time"])
-                                self.estimated_runtime_total += float(proxy_metrics["estimated_runtime_us"])
+                                self.estimated_runtime_total += float(proxy_metrics["estimated_leap_qpu_time_us"])
                                 self.fallback_qpu_calls += 1
                             if from_qpu and real_qpu:
                                 self.total_qpu_sampling_time += float(proxy_metrics["qpu_sampling_time"])
@@ -188,7 +188,7 @@ class AsyncRedisDispatcherSampler(hybrid.Runnable):
                                 self.all_qpu_delay_time_per_sample.append(proxy_metrics["qpu_delay_time_per_sample"])
                                 self.total_total_post_processing_time += float(proxy_metrics["total_post_processing_time"])
                                 self.total_post_processing_overhead_time += float(proxy_metrics["post_processing_overhead_time"])
-                                self.estimated_runtime_total += float(proxy_metrics["estimated_runtime_us"])
+                                self.estimated_runtime_total += float(proxy_metrics["estimated_leap_qpu_time_us"])
                                 self.leap_qpu_calls += 1
 
                             if self.test_type == "regret":
@@ -223,6 +223,7 @@ class RouterSampler(hybrid.Runnable):
         seed: int,
         target_graph=None, 
         max_chain_length: int = 7,
+        real_qpu_path = False,
         verbose: bool = False,
         **runopts
     ):
@@ -230,6 +231,7 @@ class RouterSampler(hybrid.Runnable):
         self.target_graph = target_graph
         self.max_chain_length = max_chain_length
         self.seed = seed
+        self.real_qpu_path = real_qpu_path
 
         self.qpu_dispatcher = qpu_dispatcher
         self.cpu_dispatcher = cpu_dispatcher
@@ -262,6 +264,11 @@ class RouterSampler(hybrid.Runnable):
         sub_qubo_num_vars = sub_bqm.num_variables
         sub_qubo_avg_degree = sub_qubo.average_degree
         sub_qubo_density = sub_qubo.density
+
+        if self.real_qpu_path:
+            max_expansion = 2.0
+        else:
+            max_expansion = 5.0
 
         edges_hash = hashlib.md5(str(sorted(sub_bqm.quadratic.keys())).encode()).hexdigest()
 
@@ -324,7 +331,7 @@ class RouterSampler(hybrid.Runnable):
             computed_emb_is_all and 
             is_qpu_ready and
             max_chain <= self.max_chain_length and
-            expansion <= 5.0
+            expansion <= max_expansion
             
             )
 
@@ -445,6 +452,11 @@ class EmbeddingAwareOrchestrator:
 
         max_chain_length = 7
         max_global_size = 1337
+
+        if real_qpu_path:
+            max_expansion_global = 2.0
+        else:
+            max_expansion_global = 5.0
         
         #features del bqm
         bqm_num_vars = mybqm.num_variables
@@ -480,7 +492,7 @@ class EmbeddingAwareOrchestrator:
             t_embedding = embedding_time
 
         #inizializzazione dei Dispatcher Redis per le rispettive code
-        qpu_dispatcher = AsyncRedisDispatcherSampler(target_queue="qpu_queue", connection_pool=self.redis_pool, meta= meta, qpu_identity= qpu_identity, test_type=test_type)
+        qpu_dispatcher = AsyncRedisDispatcherSampler(target_queue="qpu_queue", connection_pool=self.redis_pool, meta= meta, qpu_identity= qpu_identity, test_type=test_type, real_qpu_path=real_qpu_path)
         cpu_dispatcher = AsyncRedisDispatcherSampler(target_queue="cpu_queue", connection_pool=self.redis_pool, test_type=test_type)
 
         chain_lengths_global = [len(chain) for chain in global_embedding.values()] if global_embedding else []
@@ -494,6 +506,7 @@ class EmbeddingAwareOrchestrator:
             global_embedding=global_embedding,
             is_all_embeddable=is_all_embeddable,
             seed = seed,
+            real_qpu_path=real_qpu_path,
             qpu_dispatcher=qpu_dispatcher,
             cpu_dispatcher=cpu_dispatcher,
             target_graph=target_graph,
@@ -507,7 +520,7 @@ class EmbeddingAwareOrchestrator:
             is_all_embeddable and
             is_qpu_ready and
             max_chain_global <= max_chain_length and
-            expansion_global <= 5.0
+            expansion_global <= max_expansion_global
             )
 
         start_time = time.perf_counter()
@@ -619,7 +632,7 @@ class EmbeddingAwareOrchestrator:
 
                             extra_metrics = {
                                 "solve_time": wall_service_time,
-                                "estimated_runtime_us": est_us,
+                                "estimated_leap_qpu_time_us": est_us,
                                 **qpu_full_timing,
                             }
 
@@ -668,7 +681,7 @@ class EmbeddingAwareOrchestrator:
                         avg_chain_break = float(np.average(cbf, weights=weights)) if len(cbf) > 0 else 0.0
                     else:
                         chain_break_fraction = list(chain_break_frequency(physical_sampleset, global_embedding).values()) # Returns: dict: Frequency of chain breaks as a dict in the form {s: f, ...},  where s is a variable in the source graph, and frequency, a float, is the fraction of broken chains.                       
-                        avg_chain_break = np.mean(chain_break_fraction) if len(chain_break_fraction) > 0 else 0.0
+                        avg_chain_break = float(np.mean(chain_break_fraction)) if len(chain_break_fraction) > 0 else 0.0
 
                     #non uso qpu in questo ramo, ritorno valori a 0
                     qpu_full_timing = {
@@ -886,7 +899,6 @@ class EmbeddingAwareOrchestrator:
         }
 
         results = {
-            # 1. Area Routing & Policy
             "instance_id": lp_filename,
             "seed": seed,
             "num_vars": bqm_num_vars,
@@ -902,19 +914,16 @@ class EmbeddingAwareOrchestrator:
             "tp": total_tp, "fp": total_fp, "tn": total_tn, "fn": total_fn,
             "regret_mean_energy_gap": all_regret_mean_energy_gap,
             
-            # 2. Area Soluzione
             "best_energy": best_energy,
             "qplib_reference": bestknown_solution,
             "abs_gap": abs_gap,
             "rel_gap": rel_gap,
             
-            # 3. Area Proxy Metrics
             "chain_break_fraction": avg_chain_break,
             "physical_build_time": qpu_dispatcher.total_build_time,
             "solve_time": qpu_dispatcher.total_solve_time + cpu_dispatcher.total_solve_time,
             "unembed_time": qpu_dispatcher.total_unembed_time,
             
-            # 4. Area End-to-End Breakdown
             "wall_clock_time": total_wall_clock,
             "time_global_embedding": t_embedding,
             "time_subqubo_embedding": total_sub_embedding_time,

@@ -90,7 +90,7 @@ class BaseRouter(hybrid.Runnable):
                 #statistiche raccolte solo su ramo quantistico simulato
                 self.total_build_time += float(proxy_metrics["physical_build_time"])
                 self.total_unembed_time += float(proxy_metrics["unembed_time"])
-                self.estimated_runtime_total += float(proxy_metrics["estimated_runtime_us"])
+                self.estimated_runtime_total += float(proxy_metrics["estimated_leap_qpu_time_us"])
             if from_qpu and real_qpu:
                 self.total_qpu_sampling_time += float(proxy_metrics["qpu_sampling_time"])
                 self.all_qpu_anneal_time_per_sample.append(proxy_metrics["qpu_anneal_time_per_sample"])
@@ -101,7 +101,7 @@ class BaseRouter(hybrid.Runnable):
                 self.all_qpu_delay_time_per_sample.append(proxy_metrics["qpu_delay_time_per_sample"])
                 self.total_total_post_processing_time += float(proxy_metrics["total_post_processing_time"])
                 self.total_post_processing_overhead_time += float(proxy_metrics["post_processing_overhead_time"])
-                self.estimated_runtime_total += float(proxy_metrics["estimated_runtime_us"])
+                self.estimated_runtime_total += float(proxy_metrics["estimated_leap_qpu_time_us"])
 
             if self.test_type == "regret":
                 regret = proxy_metrics.get("regret",False)
@@ -190,6 +190,9 @@ class BaseRouter(hybrid.Runnable):
                             num_reads=40,
                             annealing_time = 20
                         )
+
+                        res_sampleset.resolve()
+
                         t_end = time.perf_counter()
                         wall_service_time = t_end - t_start
                         successLeap = True
@@ -248,7 +251,7 @@ class BaseRouter(hybrid.Runnable):
                     "real_qpu": True,
                     "chain_break_fraction": avg_chain_break,
                     "solve_time": wall_service_time,
-                    "estimated_runtime_us": est_us,
+                    "estimated_leap_qpu_time_us": est_us,
                     **qpu_full_timing,
                     **emb_metrics
                 }
@@ -307,7 +310,7 @@ class BaseRouter(hybrid.Runnable):
                             "physical_build_time": t_build,
                             "unembed_time": t_unembed,
                             "solve_time": t_solve_total,
-                            "estimated_runtime_us": estimated_runtime_us,
+                            "estimated_leap_qpu_time_us": estimated_runtime_us,
                             "chain_break_fraction": avg_chain_break,
                             **emb_metrics
                         }

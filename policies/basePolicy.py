@@ -172,7 +172,7 @@ class BasePolicy(ABC):
 
                         extra_metrics = {
                             "solve_time": wall_service_time,
-                            "estimated_runtime_us": est_us,
+                            "estimated_leap_qpu_time_us": est_us,
                              **qpu_full_timing,
                         }        
 
@@ -219,7 +219,7 @@ class BasePolicy(ABC):
                         avg_chain_break = float(np.average(cbf, weights=weights)) if len(cbf) > 0 else 0.0
                     else:
                         chain_break_fraction = list(chain_break_frequency(physical_sampleset, self.global_embedding).values()) # Returns: dict: Frequency of chain breaks as a dict in the form {s: f, ...},  where s is a variable in the source graph, and frequency, a float, is the fraction of broken chains.                       
-                        avg_chain_break = np.mean(chain_break_fraction) if len(chain_break_fraction) > 0 else 0.0
+                        avg_chain_break = float(np.mean(chain_break_fraction)) if len(chain_break_fraction) > 0 else 0.0
 
                     #non uso qpu in questo ramo, ritorno valori a 0
                     qpu_full_timing = {
