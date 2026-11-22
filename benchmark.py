@@ -40,23 +40,37 @@ POLICY_DEQUE = deque([
     "kerberos",
     "qbsolv",
     "mqt_qao",
-    "always_qpu_embeddable",
-    "only_features_based",
-    "only_ea_based"
+    "always_qpu",
+    "only_features",
+    "only_ea"
 ])
 
 ABLATION_DEQUE = deque([
     "embedding_aware",
-    "only_features_based",
-    "only_ea_based"
+    "only_features",
+    "only_ea"
 ])
 
 REGRET_DEQUE = deque([
     "embedding_aware",
     "mqt_qao",
-    "always_qpu_embeddable",
-    "only_features_based",
-    "only_ea_based"
+    "always_qpu",
+    "only_features",
+    "only_ea"
+])
+
+POLICY_DEQUE_QPU = deque([
+    "embedding_aware",
+    "always_qpu",
+    "only_features",
+    "only_ea"
+])
+
+REGRET_DEQUE_QPU = deque([
+    "embedding_aware",
+    "always_qpu",
+    "only_features",
+    "only_ea"
 ])
 
 #funzione factory per generare correttamente istanze per ogni policy
@@ -71,10 +85,20 @@ def get_policy_instance(name: str, subproblem_size: int, max_iter: int, converge
                             qpu_identity=qpu_identity,)
     elif name == "kerberos":
         return KerberosPolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence, meta=meta, 
-                              qpu_identity=qpu_identity)
+                              qpu_identity=qpu_identity,
+                              bqm=bqm,
+                              global_embedding=global_embedding,
+                              is_all_embeddable=is_all_embeddable,
+                              target_graph=target_graph,
+                              seed=seed,)
     elif name == "qbsolv":
         return QBSolvPolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence,meta=meta, 
-                            qpu_identity=qpu_identity)
+                            qpu_identity=qpu_identity,
+                            bqm=bqm,
+                            global_embedding=global_embedding,
+                            is_all_embeddable=is_all_embeddable,
+                            target_graph=target_graph,
+                            seed=seed,)
     elif name == "mqt_qao":
         return MQTQAOPolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence, embedding_time=embedding_time,meta=meta,
                             bqm=bqm,
@@ -83,7 +107,7 @@ def get_policy_instance(name: str, subproblem_size: int, max_iter: int, converge
                             target_graph=target_graph,
                             seed=seed,
                             qpu_identity=qpu_identity,)
-    elif name == "always_qpu_embeddable":
+    elif name == "always_qpu":
         return AlwaysQPUEmbeddablePolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence, embedding_time=embedding_time,meta=meta,
                                             bqm=bqm,
                                             global_embedding=global_embedding,
@@ -91,7 +115,7 @@ def get_policy_instance(name: str, subproblem_size: int, max_iter: int, converge
                                             target_graph=target_graph,
                                             seed=seed,
                                             qpu_identity=qpu_identity,)
-    elif name == "only_features_based":
+    elif name == "only_features":
         return OnlyFeaturesBasedPolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence, embedding_time=embedding_time,meta=meta,
                                         bqm=bqm,
                                         global_embedding=global_embedding,
@@ -99,7 +123,7 @@ def get_policy_instance(name: str, subproblem_size: int, max_iter: int, converge
                                         target_graph=target_graph,
                                         seed=seed,
                                         qpu_identity=qpu_identity,)
-    elif name == "only_ea_based":
+    elif name == "only_ea":
         return OnlyEABasedPolicy(subproblem_size=subproblem_size, max_iter=max_iter, convergence=convergence, embedding_time=embedding_time,meta=meta,
                                     bqm=bqm,
                                     global_embedding=global_embedding,
@@ -111,21 +135,27 @@ def get_policy_instance(name: str, subproblem_size: int, max_iter: int, converge
         raise ValueError(f"Policy sconosciuta: {name}")
 
 def run_comparative_suite(bqm: dimod.BinaryQuadraticModel, orchestratorEA: EmbeddingAwareOrchestrator, meta: Optional[Dict], seed=None, 
-                          qpu_identity = None, target_graph = None, max_iter: Optional[int] = 5, convergence: Optional[int] = 2, test_type = "normal"):
+                          qpu_identity = None, target_graph = None, max_iter: Optional[int] = 5, convergence: Optional[int] = 2, test_type = "normal", real_qpu_path = False):
 
     if test_type == "ablation":
         policyDeque = ABLATION_DEQUE
     elif test_type == "regret":
-        policyDeque = REGRET_DEQUE
+        if real_qpu_path:
+            policyDeque = REGRET_DEQUE_QPU
+        else:
+            policyDeque = REGRET_DEQUE
     else:
-        policyDeque = POLICY_DEQUE
+        if real_qpu_path:   
+            policyDeque = POLICY_DEQUE_QPU
+        else:
+            policyDeque = POLICY_DEQUE
 
     mybqm = SubQUBO(bqm)
 
     if seed is None:
         seed = random.randint(0,10)
 
-    if DWAVE_API_TOKEN and target_graph is None:
+    if DWAVE_API_TOKEN and target_graph is None and real_qpu_path:
         sampler = DWaveSampler(topology__type="zephyr")
         qpu_identity = sampler.solver.identity
         target_graph = sampler.to_networkx_graph()
@@ -185,6 +215,7 @@ def run_comparative_suite(bqm: dimod.BinaryQuadraticModel, orchestratorEA: Embed
                             seed=minorminer_seed, 
                             target_graph=target_graph, 
                             qpu_identity=qpu_identity,
+                            real_qpu_path = real_qpu_path
                         )
                     else:
                         #mappatura per istanziare la policy corretta con i parametri previsti
@@ -203,15 +234,7 @@ def run_comparative_suite(bqm: dimod.BinaryQuadraticModel, orchestratorEA: Embed
                             qpu_identity=qpu_identity,
                         )
 
-                        res = policy_obj.solve(
-                            #meta=meta,
-                            #bqm=bqm,
-                            #global_embedding=global_embedding,
-                            #is_all_embeddable=is_all_embeddable,
-                            #target_graph=target_graph,
-                            #seed=minorminer_seed,
-                            #qpu_identity=qpu_identity,
-                        )
+                        res = policy_obj.solve(real_qpu_path = real_qpu_path)
 
                     results.append(res)
                     
@@ -232,7 +255,8 @@ def run_comparative_suite(bqm: dimod.BinaryQuadraticModel, orchestratorEA: Embed
                     seed=seed, 
                     target_graph=target_graph, 
                     qpu_identity=qpu_identity,
-                    test_type = test_type
+                    test_type = test_type,
+                    real_qpu_path = real_qpu_path
                 )
             else:
                 #mappatura per istanziare la policy corretta con i parametri previsti
@@ -250,16 +274,7 @@ def run_comparative_suite(bqm: dimod.BinaryQuadraticModel, orchestratorEA: Embed
                     seed=seed,
                     qpu_identity=qpu_identity,
                 )
-                res = policy_obj.solve(
-                    #meta=meta,
-                    #bqm=bqm,
-                    #global_embedding=global_embedding,
-                    #is_all_embeddable=is_all_embeddable,
-                    #target_graph=target_graph,
-                    #seed=seed,
-                    #qpu_identity=qpu_identity,
-                    test_type = test_type
-                )
+                res = policy_obj.solve(test_type = test_type, real_qpu_path = real_qpu_path)
             results.append(res)
 
     #rotazione policy, avanti deterministicamente di 1
@@ -310,7 +325,7 @@ def extract_instance_number(fpath):
 
     return lp_filename
 
-def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_dict: Optional[dict] = None, test_type= "normal", n_instances = 45):
+def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_dict: Optional[dict] = None, test_type= "normal", n_instances = 45, real_qpu_path = False):
     
     lp_dir = os.path.join("test", "lp")
     lp_files = list(Path(lp_dir).rglob("*.[lL][pP]"))
@@ -370,6 +385,7 @@ def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_d
         f for f in lp_files if extract_instance_number(f) not in already_done
     ]
 
+
     print(f"Già processati: {len(already_done)}")
     print(f"Da processare: {len(todo_files)}")
 
@@ -399,7 +415,7 @@ def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_d
             "policies": list(policiesDeque),
             "minorminer_seed": seed,
             "qplib_instances": [str(f.name) for f in lp_files],
-            "hardware_backend": f"DWaveSampler: {qpu_identity}" if DWAVE_API_TOKEN else "None: Simulated Annealing"
+            "hardware_backend": f"DWaveSampler: {qpu_identity}" if DWAVE_API_TOKEN and real_qpu_path else "None: Simulated Annealing"
         }
         with open(json_metadata_path, "w", encoding="utf-8") as f:
             json.dump(experiment_metadata, f, indent=4)
@@ -413,7 +429,7 @@ def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_d
     "version": {"graph_id": "01b03fc8dc"},
     }
 
-    if DWAVE_API_TOKEN:
+    if DWAVE_API_TOKEN and real_qpu_path:
         if qpu_identity:
             sampler = DWaveSampler(solver=dict(identity=qpu_identity))
             target_graph = sampler.to_networkx_graph()
@@ -436,7 +452,7 @@ def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_d
         
         single_runs = run_comparative_suite(
             bqm=bqm, orchestratorEA=orchestratorEA, meta=meta, max_iter=max_iter, 
-            convergence=convergence, qpu_identity=qpu_identity, target_graph=target_graph, seed=seed, test_type = test_type
+            convergence=convergence, qpu_identity=qpu_identity, target_graph=target_graph, seed=seed, test_type = test_type, real_qpu_path = real_qpu_path
         )
 
         t1 = time.perf_counter()

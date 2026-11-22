@@ -1,5 +1,3 @@
-import os
-
 import hybrid
 import dimod
 import time
@@ -9,15 +7,9 @@ from subQUBO import SubQUBO
 from utils.cqmUtilities import CqmUtilities
 from policies.basePolicy import BasePolicy
 
-from dwave.system import DWaveSampler, FixedEmbeddingComposite
-from dotenv import load_dotenv
+from dwave.system import DWaveSampler
 
 from utils.mockSolverOffline import OfflineQPUSolver
-
-#carica le variabili contenute nel file .env
-load_dotenv()
-
-DWAVE_API_KEY = os.getenv("DWAVE_API_TOKEN")
 
 class QPUTimeEstimator(hybrid.Runnable):
     """Intercetta i sub-problemi nel ramo QPU e accumula il tempo stimato."""
@@ -61,9 +53,7 @@ class QBSolvPolicy(BasePolicy):
     def __init__(self, **kwargs):
         super().__init__(name="qbsolv", **kwargs)
 
-    def solve(self, 
-              #meta, bqm, global_embedding,is_all_embeddable,seed, qpu_identity, target_graph=None, 
-              test_type = "normal") -> Dict[str, Any]:
+    def solve(self, test_type = "normal", real_qpu_path=False) -> Dict[str, Any]:
         lp_filename = self.meta.get("lp_filename", None)
         bestknown_solution = float(self.meta.get("bestknown_solution",None))
 
@@ -86,7 +76,7 @@ class QBSolvPolicy(BasePolicy):
         }
 
         real_qbsolv = False
-        if self.qpu_identity:
+        if self.qpu_identity and real_qpu_path:
             qpu_sampler = DWaveSampler(solver=dict(identity=self.qpu_identity))
 
             qpu_branch = hybrid.QPUSubproblemAutoEmbeddingSampler(

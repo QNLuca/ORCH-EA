@@ -76,6 +76,10 @@ class LPUrlRequest(BaseModel):
     Prefactor usato per scaling della chain strength. Per problemi non patologici il range raccomandato è tra [0.5-2].
     \n0 = auto.
     """
+    real_qpu: bool = False
+    """
+    Seleziona path QPU reale o risolvi in locale.
+    """
     verbose: Optional[bool] = False
     """
     Stampa più informazioni sull'esecuzione dell'orchestratore.
@@ -91,6 +95,10 @@ class BenchmarkRequest(BaseModel):
     ablation_test: Optional[bool] = False
     """
     Avvia un ablation test sui file locali tra le policy embedding_aware, only_features e only_EA. Vengono eseguite tre risoluzioni a istanza con tre differenti seed.
+    """
+    real_qpu: bool = False
+    """
+    Seleziona path QPU reale o risolvi in locale.
     """
     n_instances: Optional[int] = 45
     """
@@ -132,7 +140,7 @@ def run_pipeline(job_id: str, req: LPUrlRequest):
               "progress": "Risoluzione del problema con metodo embedding-aware..."}))
 
         #risoluzione embedding-aware
-        result = orchestrator.solve(subqubo_obj, meta)
+        result = orchestrator.solve(subqubo_obj, meta, req.real_qpu)
 
         final_payload = {
             "status": "COMPLETED",
@@ -193,7 +201,8 @@ def run_benchmark_pipeline(job_id: str, req: LPUrlRequest):
             orchestratorEA=orchestrator,
             max_iter=req.max_iter,
             convergence=req.convergence,
-            meta = meta
+            meta = meta,
+            real_qpu_path = req.real_qpu
         )
 
         #formattazione e salvataggio dei risultati
@@ -239,7 +248,7 @@ def background_benchmark_task(req: BenchmarkRequest):
     benchmark_status['test_type'] = test_type
     benchmark_status["running"] = True
     try:
-        execute_files_benchmark(orchestratorEA=orchestrator, status_dict=benchmark_status, test_type =test_type, n_instances=n_instances)
+        execute_files_benchmark(orchestratorEA=orchestrator, status_dict=benchmark_status, test_type =test_type, n_instances=n_instances, real_qpu_path = req.real_qpu)
     except Exception as e:
         #stampa il traceback nei log di sistema
         tb_str = traceback.format_exc()

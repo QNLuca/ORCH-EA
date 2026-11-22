@@ -1,4 +1,3 @@
-import os
 import time
 from typing import Any, Dict
 import dimod
@@ -8,8 +7,7 @@ from subQUBO import SubQUBO
 from utils.cqmUtilities import CqmUtilities
 from policies.basePolicy import BasePolicy
 
-from dwave.system import DWaveSampler, FixedEmbeddingComposite
-from dotenv import load_dotenv
+from dwave.system import DWaveSampler
 
 from utils.mockSolverOffline import OfflineQPUSolver
 
@@ -56,9 +54,7 @@ class KerberosPolicy(BasePolicy):
     def __init__(self, **kwargs):
         super().__init__(name="kerberos", **kwargs)
 
-    def solve(self, 
-              #meta, bqm, seed, global_embedding,is_all_embeddable, qpu_identity, target_graph=None, 
-              test_type = "normal") -> Dict[str, Any]:
+    def solve(self, test_type = "normal", real_qpu_path = False) -> Dict[str, Any]:
         lp_filename = self.meta.get("lp_filename", None)
         bestknown_solution = float(self.meta.get("bestknown_solution",None))
 
@@ -83,7 +79,7 @@ class KerberosPolicy(BasePolicy):
         }
 
         real_kerberos = False
-        if self.qpu_identity:
+        if self.qpu_identity and real_qpu_path:
             qpu_sampler = DWaveSampler(solver=dict(identity=self.qpu_identity))
 
             workflow = hybrid.Kerberos(max_iter=self.max_iter,convergence=self.convergence, 

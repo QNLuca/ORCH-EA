@@ -53,12 +53,14 @@ class AsyncRedisDispatcherSampler(hybrid.Runnable):
     Dispatcher asiincrono, invia il task a Redis e restituisce un Future.
     Consente a hybrid.Map di inviare N sub-QUBO in parallelo ai worker.
     """
-    def __init__(self, target_queue: str, connection_pool: redis.ConnectionPool, timeout: int = 500, max_workers: int = 8, meta: Dict = None, test_type="normal", qpu_identity = None, **runopts):
+    def __init__(self, target_queue: str, connection_pool: redis.ConnectionPool, timeout: int = 500, max_workers: int = 8, meta: Dict = None, 
+                test_type="normal", qpu_identity = None, real_qpu_path = False, **runopts):
         super().__init__(**runopts)
         self.target_queue = target_queue
         self.timeout = timeout
         self.pool_ref = connection_pool
         self.meta = meta
+        self.real_qpu_path = real_qpu_path
 
         self.leap_qpu_calls = 0
         self.fallback_qpu_calls = 0
@@ -137,7 +139,7 @@ class AsyncRedisDispatcherSampler(hybrid.Runnable):
 
             job = q.enqueue(
                 "worker.solve_subqubo_rq",
-                args=(sub_bqm, self.target_queue, embedding, chain_strength_prefactor, self.qpu_identity, self.test_type),
+                args=(sub_bqm, self.target_queue, embedding, chain_strength_prefactor, self.qpu_identity, self.test_type, self.real_qpu_path),
                 job_timeout=300,
                 result_ttl=300,
                 job_id=job_id,
@@ -411,6 +413,7 @@ class EmbeddingAwareOrchestrator:
 
     def solve(self, bqm: dimod.BinaryQuadraticModel, 
               meta: Dict,
+              real_qpu_path = False,
               test_type ="normal",
               seed=None,
               target_graph=None,
@@ -525,7 +528,7 @@ class EmbeddingAwareOrchestrator:
             qpu_sampler = None
             est_us = None
             try:
-                if DWAVE_API_TOKEN:
+                if DWAVE_API_TOKEN and real_qpu_path:
 
                     if benchmark:  
                         qpu_sampler = DWaveSampler(solver=dict(identity=qpu_identity))
@@ -626,7 +629,7 @@ class EmbeddingAwareOrchestrator:
                     target_bqm = embed_bqm(
                         bqm, 
                         embedding=global_embedding, 
-                        target_adjacency=target_graph, #se ho API_KEY allora target_graph è già topologia reale
+                        target_adjacency=target_graph, #se ho API_KEY e real_qpu_path allora target_graph è già topologia reale
                         chain_strength=chain_strength
                     )
                     t_build = time.perf_counter() - t_build_0

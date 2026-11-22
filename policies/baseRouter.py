@@ -17,7 +17,7 @@ from utils.mockSolverOffline import OfflineQPUSolver
 
 class BaseRouter(hybrid.Runnable):
     """Router base che gestisce le metriche e l'esecuzione su QPU/CPU."""
-    def __init__(self, qpu_sampler, cpu_sampler, test_type= "normal", seed=None,qpu_identity=None, target_graph=None, chain_strength_prefactor = None, **runopts):
+    def __init__(self, qpu_sampler, cpu_sampler, test_type= "normal", seed=None,qpu_identity=None, target_graph=None, chain_strength_prefactor = None, real_qpu_path = False,**runopts):
         super().__init__(**runopts)
         self.qpu_sampler = qpu_sampler
         self.cpu_sampler = cpu_sampler
@@ -25,6 +25,7 @@ class BaseRouter(hybrid.Runnable):
         self.fallback_qpu_calls = 0
         self.cpu_calls = 0
         self.chain_strength_prefactor = chain_strength_prefactor
+        self.real_qpu_path = real_qpu_path
 
         self.test_type=test_type
 
@@ -156,7 +157,7 @@ class BaseRouter(hybrid.Runnable):
         successLeap = False
         est_us = None
 
-        if self.qpu_identity:
+        if self.qpu_identity and self.real_qpu_path:
             #sono per forza in un benchamrk e dunque se ho API ho anche qpu_identity
             with self.lock:
                 #gestione thread-safe dell'avvio del sampler
@@ -296,7 +297,7 @@ class BaseRouter(hybrid.Runnable):
                 avg_chain_break = float(np.average(cbf, weights=weights)) if len(cbf) > 0 else 0.0
             else:
                 chain_break_fraction = list(chain_break_frequency(physical_sampleset, embedding).values()) # Returns: dict: Frequency of chain breaks as a dict in the form {s: f, ...},  where s is a variable in the source graph, and frequency, a float, is the fraction of broken chains.                       
-                avg_chain_break = np.mean(chain_break_fraction) if len(chain_break_fraction) > 0 else 0.0
+                avg_chain_break = float(np.mean(chain_break_fraction)) if len(chain_break_fraction) > 0 else 0.0
 
             emb_metrics = SubQUBO.compute_advanced_embedding_metrics(embedding, qpu_state, avg_chain_break)
 
@@ -383,12 +384,10 @@ class BaseRouter(hybrid.Runnable):
                 extra_metrics["regret_energy_gap"] = 0.0
 
         elif route_to_qpu:
-            #self.qpu_calls += 1
 
             res_sampleset, extra_metrics = self._qpu_branch(state,embedding)
 
         else:
-            #self.cpu_calls += 1
 
             res_sampleset, extra_metrics = self._cpu_branch(state,embedding)
 

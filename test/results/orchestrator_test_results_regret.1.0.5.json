@@ -1,11 +1,18 @@
 {
-    "code_version": "1.0.2",
-    "timestamp_start": "2026-11-12T21:10:52.723325",
+    "code_version": "1.0.5",
+    "timestamp_start": "2026-11-20T22:18:12.492189",
     "parameters": {
         "max_iter": 10,
         "convergence": 3,
         "num_reads": 40
     },
+    "policies": [
+        "embedding_aware",
+        "mqt_qao",
+        "always_qpu",
+        "only_features",
+        "only_ea"
+    ],
     "minorminer_seed": 5,
     "qplib_instances": [
         "QPLIB_0067.lp",

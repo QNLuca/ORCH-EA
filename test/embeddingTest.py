@@ -6,6 +6,7 @@ import dwave.graphs as dnx
 from minorminer import find_embedding
 import numpy as np
 import pandas as pd
+from urllib.parse import urlparse
 
 current = os.path.dirname(os.path.realpath(__file__))
 parent = os.path.dirname(current)
@@ -13,6 +14,16 @@ sys.path.append(parent)
 
 from loadLp import LoadLp
 from subQUBO import SubQUBO
+
+def extract_instance_number(fpath):
+    uri = str(fpath)
+    parsed_url = urlparse(uri)
+    path = parsed_url.path if parsed_url.scheme else uri
+
+    stem = Path(path).stem
+    parts = stem.split("_")
+    inst_id = parts[1] if len(parts) > 1 and parts[1] else stem
+    return str(inst_id).strip()
 
 
 def run_embedding_test_for_file(filepath, target_graph, num_runs=10):
@@ -51,7 +62,7 @@ def run_embedding_test_for_file(filepath, target_graph, num_runs=10):
         }
 
         run_record = {
-            "instance_id": os.path.basename(filepath),
+            "instance_id": extract_instance_number(os.path.basename(filepath)),
             "num_run": seed+1,
             "seed": seed,
             "success": False,
@@ -124,7 +135,6 @@ def load_existing_results(parquet_path):
         return pd.read_parquet(parquet_path)
     return pd.DataFrame()
 
-
 def benchmark_zephyr_embedding():
     lp_dir = os.path.join(current, "lp")
     num_runs = int(sys.argv[1]) if len(sys.argv) > 1 else 10
@@ -154,14 +164,16 @@ def benchmark_zephyr_embedding():
     df_runs_existing = load_existing_results(single_runs_path)
 
     already_done = (
-        set(df_runs_existing["file_name"].astype(str))
+        set(df_runs_existing["instance_id"].astype(str).str.strip())
         if not df_runs_existing.empty
-        and "file_name" in df_runs_existing.columns
+        and "instance_id" in df_runs_existing.columns
         else set()
     )
 
     todo_files = [
-        f for f in lp_files if os.path.basename(f) not in already_done
+        f
+        for f in lp_files
+        if extract_instance_number(f) not in already_done
     ]
 
     print(f"Già processati: {len(already_done)}")

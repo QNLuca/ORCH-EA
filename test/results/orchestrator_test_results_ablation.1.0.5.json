@@ -1,6 +1,6 @@
 {
-    "code_version": "1.0.2",
-    "timestamp_start": "2026-11-13T17:36:36.525909",
+    "code_version": "1.0.5",
+    "timestamp_start": "2026-11-20T19:22:38.815648",
     "parameters": {
         "max_iter": 10,
         "convergence": 3,

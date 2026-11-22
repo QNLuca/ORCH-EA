@@ -122,7 +122,7 @@ def recover_sample_from_leap(failed_job_id: str):
     original_job.save_meta()
     return {"status": "RECOVERED", "problem_id": problem_id}
 
-def qpu_branch(sub_bqm, embedding, rq_job, chain_strength_prefactor: float = None, qpu_identity = None):
+def qpu_branch(sub_bqm, embedding, rq_job, chain_strength_prefactor: float = None, qpu_identity = None, real_qpu_path = False):
 
     if chain_strength_prefactor is not None:
                     
@@ -139,7 +139,7 @@ def qpu_branch(sub_bqm, embedding, rq_job, chain_strength_prefactor: float = Non
     qpu_sampler = None
     est_us = None
     try:
-        if DWAVE_API_TOKEN: 
+        if DWAVE_API_TOKEN and real_qpu_path: 
              if qpu_identity:
                  qpu_sampler = DWaveSampler(solver=dict(identity=qpu_identity)) 
              else:
@@ -221,7 +221,7 @@ def qpu_branch(sub_bqm, embedding, rq_job, chain_strength_prefactor: float = Non
 
         if not DWAVE_API_TOKEN or not successLeap:
 
-             if DWAVE_API_TOKEN:
+             if DWAVE_API_TOKEN and real_qpu_path:
                  target_graph = qpu_sampler.to_networkx_graph() #uso almeno topologia reale seppur su SA
              else:
                  target_graph = dnx.zephyr_graph(12)
@@ -274,7 +274,7 @@ def qpu_branch(sub_bqm, embedding, rq_job, chain_strength_prefactor: float = Non
              extra_metrics = {
                  "from_qpu": True,
                  "real_qpu": False,
-                 "qpu_leap_failure": not successLeap if DWAVE_API_TOKEN else False,
+                 "qpu_leap_failure": not successLeap if DWAVE_API_TOKEN and real_qpu_path else False,
                  "physical_build_time": t_build,
                  "solve_time": t_solve,
                  "unembed_time": t_unembed,
@@ -327,7 +327,7 @@ def cpu_branch(sub_bqm, embedding = None):
 
 def solve_subqubo_rq(sub_bqm: dimod.BinaryQuadraticModel,
                   sampler_type: str, embedding=None, chain_strength_prefactor: float = None, 
-                  qpu_identity = None, test_type="normal") -> dimod.SampleSet:
+                  qpu_identity = None, test_type="normal", real_qpu_path = False) -> dimod.SampleSet:
         """
         Risolve direttamente il sub-QUBO con il sampler indicato.
         """
@@ -364,6 +364,7 @@ def solve_subqubo_rq(sub_bqm: dimod.BinaryQuadraticModel,
 
                 extra_metrics["regret_energy_gap"] = chosen_energy - optimal_energy
             else:
+                #non ho embedding, non posso calcolare regret energy
                 extra_metrics["regret_energy_gap"] = 0.0
 
 

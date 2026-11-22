@@ -29,9 +29,7 @@ class AlwaysCPUPolicy(BasePolicy):
     def __init__(self, **kwargs):
         super().__init__(name="always_cpu", **kwargs)
 
-    def solve(self, 
-              #meta, bqm, global_embedding, is_all_embeddable, seed, qpu_identity=None, target_graph=None, 
-              test_type = "normal") -> Dict[str, Any]:
+    def solve(self, test_type = "normal", real_qpu_path=False) -> Dict[str, Any]:
         lp_filename = self.meta.get("lp_filename", None)
         bestknown_solution = float(self.meta.get("bestknown_solution",None))
 
