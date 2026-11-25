@@ -1,0 +1,38 @@
+{
+    "code_version": "1.1.0",
+    "timestamp_start": "2026-11-23T22:31:26.981648",
+    "parameters": {
+        "max_iter": 10,
+        "convergence": 3,
+        "num_reads": 40
+    },
+    "policies": [
+        "embedding_aware",
+        "only_features",
+        "only_ea"
+    ],
+    "minorminer_seed": [0,1],
+    "qplib_instances": [
+        "QPLIB_3834.lp",
+        "QPLIB_2512.lp",
+        "QPLIB_3402.lp",
+        "QPLIB_5881.lp",
+        "QPLIB_10048.lp",
+        "QPLIB_3775.lp",
+        "QPLIB_3347.lp",
+        "QPLIB_3361.lp",
+        "QPLIB_6487.lp",
+        "QPLIB_6941.lp",
+        "QPLIB_3693.lp",
+        "QPLIB_3832.lp",
+        "QPLIB_3852.lp",
+        "QPLIB_2357.lp",
+        "QPLIB_0752.lp",
+        "QPLIB_3703.lp",
+        "QPLIB_3565.lp",
+        "QPLIB_5721.lp",
+        "QPLIB_3506.lp",
+        "QPLIB_3745.lp"
+    ],
+    "hardware_backend": "DWaveSampler: {'name': 'Advantage2_system1', 'version': {'graph_id': '01b03fc8dc'}}"
+}

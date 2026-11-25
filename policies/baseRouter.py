@@ -5,7 +5,6 @@ import hybrid
 from dwave.embedding import embed_bqm, unembed_sampleset, chain_break_frequency
 from dwave.embedding.chain_breaks import majority_vote
 from dwave.embedding.chain_strength import uniform_torque_compensation
-import dwave.graphs as dnx
 
 from dwave.system import DWaveSampler, FixedEmbeddingComposite
 from dwave.cloud.exceptions import SolverError, InvalidAPIResponseError, PollingTimeout, ProblemUploadError, RequestTimeout
@@ -350,12 +349,6 @@ class BaseRouter(hybrid.Runnable):
 
         if self.test_type == "regret":
             #calcolo sia ramo QPU che CPU e calcolo regret
-            #if route_to_qpu:
-            #    with self.lock:
-            #        self.qpu_calls += 1
-            #else:
-            #    with self.lock:
-            #        self.cpu_calls +=1
 
             best_energy_qpu = None
             res_sampleset_qpu = None

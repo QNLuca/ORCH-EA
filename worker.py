@@ -215,7 +215,7 @@ def qpu_branch(sub_bqm, embedding, rq_job, chain_strength_prefactor: float = Non
                 #estrazione di timing
                 if successLeap and res_sampleset is not None:
                     extra_metrics = _build_qpu_metrics(res_sampleset, embedding, sub_bqm, wall_service_time)
-                    extra_metrics['estimated_runtime_us'] = est_us
+                    extra_metrics['estimated_leap_qpu_time_us'] = est_us
                     actual_qat = extra_metrics['qpu_access_time']
                     charge(actual_qat)
 

@@ -2,7 +2,7 @@ import os
 from typing import Tuple
 import urllib.request
 import dimod
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 import io
 from urllib.parse import urlparse
 from pathlib import Path

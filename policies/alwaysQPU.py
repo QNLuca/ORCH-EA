@@ -58,7 +58,8 @@ class AlwaysQPUEmbeddablePolicy(BasePolicy):
         
         if self.is_all_embeddable:
 
-            if DWAVE_API_TOKEN and real_qpu_path: #and nella richiesta flag "real_qpu"
+            if DWAVE_API_TOKEN and real_qpu_path and test_type != "regret":
+            #se sto eseguendo routing regret test non lo calcolo sul ramo diretto e allora non spreco tempo QPU reale
                 real_qpu = True
             else:
                 real_qpu = False

@@ -90,7 +90,6 @@ class MQTAORouter(BaseRouter):
 
         if self.test_type == "regret":
             #ho bisogno di embedding per calcolare correttamente metrica regret
-            print(f"regret test su sottoproblema in corso...")
             t_emb_sub0 = time.perf_counter()
             embedding, is_embeddable, _ = sub_qubo.compute_embedding(sub_bqm, self.target_graph, self.seed)
             t_emb_sub = time.perf_counter() - t_emb_sub0
@@ -159,7 +158,8 @@ class MQTQAOPolicy(BasePolicy):
 
         if predicted_solver == "QA" and self.is_all_embeddable:
 
-            if DWAVE_API_TOKEN and real_qpu_path:
+            if DWAVE_API_TOKEN and real_qpu_path and test_type != "regret":
+            #se sto eseguendo routing regret test non lo calcolo sul ramo diretto e allora non spreco tempo QPU reale
                 real_qpu = True
             else:
                 real_qpu = False

@@ -300,10 +300,10 @@ def start_benchmark(request: BenchmarkRequest, background_tasks: BackgroundTasks
             detail="ablation test e regret test non possono essere eseguiti contemporaneamente."
         )
 
-    if request.n_instances not in [45,30,20,5]:
+    if request.n_instances not in [45,30,20,16,5]:
         raise HTTPException(
             status_code=400,
-            detail="Il numero di istanze deve essere specificato tra i seguenti valori: 45, 30, 20, 5."
+            detail="Il numero di istanze deve essere specificato tra i seguenti valori: 45, 30, 20, 16, 5."
         )
     
     background_tasks.add_task(background_benchmark_task, request)

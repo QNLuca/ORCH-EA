@@ -541,7 +541,8 @@ class EmbeddingAwareOrchestrator:
             qpu_sampler = None
             est_us = None
             try:
-                if DWAVE_API_TOKEN and real_qpu_path:
+                if DWAVE_API_TOKEN and real_qpu_path and test_type != "regret":
+                    #se sto eseguendo routing regret test non lo calcolo sul ramo diretto e allora non spreco tempo QPU reale
 
                     if benchmark:  
                         qpu_sampler = DWaveSampler(solver=dict(identity=qpu_identity))

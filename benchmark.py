@@ -198,7 +198,7 @@ def run_comparative_suite(bqm: dimod.BinaryQuadraticModel, orchestratorEA: Embed
     #itera sulla coda ruotata e istanzia dinamicamente la policy corrispondente
     if test_type == "ablation":       
 
-        for minorminer_seed in range(0,3):
+        for minorminer_seed in range(0,2): #ablation test su 2 seed differenti
                 
                 current_policies = list(policyDeque)
 
@@ -416,6 +416,8 @@ def execute_files_benchmark(orchestratorEA: EmbeddingAwareOrchestrator, status_d
         with open(json_metadata_path, "r", encoding="utf-8") as f:
             metadata = json.load(f)
             seed = metadata.get("minorminer_seed")
+            if not isinstance(seed, int):
+                seed = random.randint(0, 10)
         print(f"Ripristinato seed da precedente file JSON")
     else:
         seed = random.randint(0, 10)
